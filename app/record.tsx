@@ -90,6 +90,7 @@ export default function RecordScreen() {
       return;
     }
     const now = new Date().toISOString();
+    const clashing = date !== targetDate ? records.find((record) => record.date === date) : undefined;
     const next: SleepRecord = {
       id: date,
       date,
@@ -104,11 +105,23 @@ export default function RecordScreen() {
       headache: headache === "yes",
       note: note.trim(),
       isSample: false,
-      createdAt: existing?.createdAt ?? now,
+      createdAt: clashing?.createdAt ?? existing?.createdAt ?? now,
       updatedAt: now,
     };
-    saveRecord(next);
-    router.replace({ pathname: "/detail/[date]", params: { date } });
+    const commit = () => {
+      saveRecord(next);
+      router.replace({ pathname: "/detail/[date]", params: { date } });
+    };
+    // Records are keyed by date, so saving onto a date that already has one
+    // replaces it. Ask first instead of losing the existing entry silently.
+    if (clashing) {
+      Alert.alert("その日の記録を上書きしますか？", `${formatDate(date)} には既に記録があります。上書きすると元の内容は戻せません。`, [
+        { text: "キャンセル", style: "cancel" },
+        { text: "上書きする", style: "destructive", onPress: commit },
+      ]);
+      return;
+    }
+    commit();
   };
 
   if (!isReady) return <ScreenContainer />;

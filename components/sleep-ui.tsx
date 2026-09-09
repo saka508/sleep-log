@@ -323,7 +323,7 @@ export function LineChart({ records, metric }: { records: SleepRecord[]; metric:
   const rawMin = Math.min(...points.map((point) => point.value));
   const rawMax = Math.max(...points.map((point) => point.value));
   const cushion = rawMax === rawMin ? Math.max(1, rawMax * 0.08) : (rawMax - rawMin) * 0.18;
-  const min = Math.max(metric === "sleepiness" || metric === "clarity" ? 0 : 0, rawMin - cushion);
+  const min = Math.max(0, rawMin - cushion);
   const max = rawMax + cushion;
   const toX = (index: number) => left + (index / Math.max(1, points.length - 1)) * (width - left - right);
   const toY = (value: number) => top + (1 - (value - min) / Math.max(1, max - min)) * (height - top - bottom);

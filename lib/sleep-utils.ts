@@ -196,12 +196,14 @@ const sampleRows = [
   ["23:45", "07:10", 410, 25, 0, 4, 7, false, false, "普通の日。"],
   ["23:20", "07:25", 475, 15, 0, 2, 9, false, false, "朝に余裕があった。"],
   ["00:30", "07:00", 360, 35, 20, 7, 4, true, true, "眠気が強かった。"],
-  ["23:40", "07:15", 430, 20, 0, 3, 8, false, false, "サンプルの最新記録。"],
+  ["23:40", "07:15", 430, 20, 0, 3, 8, false, false, "サンプルの最新記録（昨日）。"],
 ] as const;
 
 export function createSampleRecords(): SleepRecord[] {
   return sampleRows.map((row, index) => {
-    const date = daysFromToday(index - sampleRows.length + 1);
+    // Samples end yesterday so a first launch still shows today as 未記録
+    // instead of presenting demo data as something the user recorded.
+    const date = daysFromToday(index - sampleRows.length);
     const [bedTime, wakeTime, sleepMinutes, latencyMinutes, napMinutes, sleepiness, clarity, caffeine, headache, note] = row;
     return {
       id: date,
