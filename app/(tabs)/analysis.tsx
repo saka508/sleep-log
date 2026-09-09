@@ -5,7 +5,7 @@ import { Card, EmptyState, LineChart, MetricCard, PageHeader, ScatterPlot, Secti
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { useSleepData } from "@/lib/sleep-store";
-import { correlation, formatDuration, getSleepStats, type TrendMetric } from "@/lib/sleep-utils";
+import { correlation, formatDuration, getMetricValue, getSleepStats, type TrendMetric } from "@/lib/sleep-utils";
 
 type Period = "7" | "14" | "30";
 type Relation = "sleepiness" | "clarity" | "bedtime";
@@ -25,9 +25,10 @@ export default function AnalysisScreen() {
   }, [records, period]);
   const stats = getSleepStats(filtered);
   const pair = useMemo(() => {
-    const yMetric: TrendMetric = relation === "sleepiness" ? "sleepiness" : relation === "clarity" ? "clarity" : "sleepiness";
+    const yMetric: TrendMetric = relation === "clarity" ? "clarity" : "sleepiness";
     const xMetric: TrendMetric = relation === "bedtime" ? "bedTime" : "sleepMinutes";
-    return { xMetric, yMetric, value: correlation(filtered.map((record) => ({ x: xMetric === "bedTime" ? record.bedTime >= "12:00" ? Number(record.bedTime.slice(0, 2)) * 60 + Number(record.bedTime.slice(3)) : Number(record.bedTime.slice(0, 2)) * 60 + Number(record.bedTime.slice(3)) + 1440 : record.sleepMinutes, y: yMetric === "sleepiness" ? record.sleepiness : record.clarity }))) };
+    const value = correlation(filtered.map((record) => ({ x: getMetricValue(record, xMetric), y: getMetricValue(record, yMetric) })));
+    return { xMetric, yMetric, value };
   }, [filtered, relation]);
 
   if (!isReady) return <ScreenContainer />;
@@ -68,12 +69,12 @@ export default function AnalysisScreen() {
               <ScatterPlot records={filtered} xMetric={pair.xMetric} yMetric={pair.yMetric} />
               <View style={styles.relationshipCopy}>
                 <Text style={[styles.relationshipTitle, { color: colors.foreground }]}>
-                  {pair.value === null ? "もう少し記録が必要です" : `相関の目安：${Math.abs(pair.value).toFixed(2)}`}
+                  {pair.value === null ? "もう少し記録が必要です" : `相関の目安：${pair.value >= 0 ? "+" : "−"}${Math.abs(pair.value).toFixed(2)}（${describeStrength(pair.value)}）`}
                 </Text>
                 <Text style={[styles.relationshipText, { color: colors.muted }]}>
                   {pair.value === null
                     ? "3日以上の記録で傾向を確認できます。"
-                    : "点のばらつきから生活の傾向を眺めるための表示です。医学的な原因や診断を示すものではありません。"}
+                    : `${describeDirection(pair.xMetric, pair.yMetric, pair.value)}点のばらつきから生活の傾向を眺めるための表示です。医学的な原因や診断を示すものではありません。`}
                 </Text>
               </View>
             </Card>
@@ -94,6 +95,25 @@ export default function AnalysisScreen() {
       </ScrollView>
     </ScreenContainer>
   );
+}
+
+function describeStrength(value: number) {
+  const strength = Math.abs(value);
+  if (strength >= 0.7) return "はっきりした傾向";
+  if (strength >= 0.4) return "ゆるやかな傾向";
+  return "ほとんど関係なし";
+}
+
+/**
+ * Turns the sign of the correlation into plain Japanese. The direction is the
+ * useful part — "長く寝た日ほど眠気が軽い" and its opposite are very different
+ * findings that an absolute value would hide.
+ */
+function describeDirection(xMetric: TrendMetric, yMetric: TrendMetric, value: number) {
+  if (Math.abs(value) < 0.4) return "";
+  const x = xMetric === "bedTime" ? "就寝が遅い日ほど" : "睡眠が長い日ほど";
+  const y = yMetric === "clarity" ? "頭の冴え" : "眠気";
+  return `${x}${y}は${value >= 0 ? "高め" : "低め"}、という傾向が出ています。`;
 }
 
 const styles = StyleSheet.create({

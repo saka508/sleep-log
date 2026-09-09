@@ -7,20 +7,32 @@ import { SchemeColors, type ColorScheme } from "@/constants/theme";
 
 const THEME_KEY = "sleep-log.theme";
 
+/** What the user picked. "system" follows the device, the others pin it. */
+export type ThemePreference = "system" | ColorScheme;
+
 type ThemeContextValue = {
+  /** The scheme actually in effect, after resolving "system". */
   colorScheme: ColorScheme;
-  setColorScheme: (scheme: ColorScheme) => void;
+  preference: ThemePreference;
+  setPreference: (preference: ThemePreference) => void;
 };
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
+function isPreference(value: unknown): value is ThemePreference {
+  return value === "system" || value === "light" || value === "dark";
+}
+
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const systemScheme = useSystemColorScheme() === "dark" ? "dark" : "light";
-  const [colorScheme, setColorSchemeState] = useState<ColorScheme>(systemScheme);
+  const [preference, setPreferenceState] = useState<ThemePreference>("system");
+  const colorScheme: ColorScheme = preference === "system" ? systemScheme : preference;
 
-  const applyScheme = useCallback((scheme: ColorScheme) => {
-    nativewindColorScheme.set(scheme);
-    Appearance.setColorScheme?.(scheme);
+  const applyScheme = useCallback((scheme: ColorScheme, mode: ThemePreference) => {
+    nativewindColorScheme.set(mode);
+    // Clearing the override is what lets useSystemColorScheme keep tracking the
+    // device once the user goes back to "システムに従う".
+    Appearance.setColorScheme?.(mode === "system" ? "unspecified" : scheme);
     if (typeof document !== "undefined") {
       const root = document.documentElement;
       root.dataset.theme = scheme;
@@ -32,18 +44,18 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     void AsyncStorage.getItem(THEME_KEY).then((saved) => {
-      if (saved === "light" || saved === "dark") setColorSchemeState(saved);
+      if (isPreference(saved)) setPreferenceState(saved);
     });
   }, []);
 
-  const setColorScheme = useCallback((scheme: ColorScheme) => {
-    setColorSchemeState(scheme);
-    void AsyncStorage.setItem(THEME_KEY, scheme);
+  const setPreference = useCallback((next: ThemePreference) => {
+    setPreferenceState(next);
+    void AsyncStorage.setItem(THEME_KEY, next);
   }, []);
 
   useEffect(() => {
-    applyScheme(colorScheme);
-  }, [applyScheme, colorScheme]);
+    applyScheme(colorScheme, preference);
+  }, [applyScheme, colorScheme, preference]);
 
   const themeVariables = useMemo(
     () =>
@@ -61,7 +73,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     [colorScheme],
   );
 
-  const value = useMemo(() => ({ colorScheme, setColorScheme }), [colorScheme, setColorScheme]);
+  const value = useMemo(
+    () => ({ colorScheme, preference, setPreference }),
+    [colorScheme, preference, setPreference],
+  );
 
   return <ThemeContext.Provider value={value}><View style={[{ flex: 1 }, themeVariables]}>{children}</View></ThemeContext.Provider>;
 }
