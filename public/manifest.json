@@ -1,0 +1,17 @@
+{
+  "name": "Sleep Log",
+  "short_name": "Sleep Log",
+  "start_url": "/sleep-log/",
+  "scope": "/sleep-log/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#5B63D9",
+  "background_color": "#F7F8FC",
+  "icons": [
+    {
+      "src": "/sleep-log/icon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
