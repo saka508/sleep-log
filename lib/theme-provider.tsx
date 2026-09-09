@@ -1,6 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { Appearance, View, useColorScheme as useSystemColorScheme } from "react-native";
+import { View, useColorScheme as useSystemColorScheme } from "react-native";
 import { colorScheme as nativewindColorScheme, vars } from "nativewind";
 
 import { SchemeColors, type ColorScheme } from "@/constants/theme";
@@ -28,11 +28,19 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [preference, setPreferenceState] = useState<ThemePreference>("system");
   const colorScheme: ColorScheme = preference === "system" ? systemScheme : preference;
 
-  const applyScheme = useCallback((scheme: ColorScheme, mode: ThemePreference) => {
-    nativewindColorScheme.set(mode);
-    // Clearing the override is what lets useSystemColorScheme keep tracking the
-    // device once the user goes back to "システムに従う".
-    Appearance.setColorScheme?.(mode === "system" ? "unspecified" : scheme);
+  const applyScheme = useCallback((scheme: ColorScheme) => {
+    // Always hand NativeWind the resolved scheme, never "system". NativeWind
+    // turns "system" into Appearance.setColorScheme(null), and RN 0.86 passes
+    // that straight to AppearanceModule.setColorScheme(style: String), whose
+    // parameter is non-null in Kotlin — an instant NPE on the native modules
+    // thread. Since "system" is the default preference, that crashed the app on
+    // first launch.
+    //
+    // Nothing calls Appearance.setColorScheme either: this context is the
+    // source of truth for the app's colours, and overriding RN's Appearance
+    // would make useSystemColorScheme report the pinned value, which is exactly
+    // the signal we need to keep following the device.
+    nativewindColorScheme.set(scheme);
     if (typeof document !== "undefined") {
       const root = document.documentElement;
       root.dataset.theme = scheme;
@@ -54,8 +62,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    applyScheme(colorScheme, preference);
-  }, [applyScheme, colorScheme, preference]);
+    applyScheme(colorScheme);
+  }, [applyScheme, colorScheme]);
 
   const themeVariables = useMemo(
     () =>
