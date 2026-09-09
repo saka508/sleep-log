@@ -55,7 +55,7 @@ export default function RecordDetailScreen() {
         <SectionLabel title="睡眠の内訳" />
         <Card style={styles.listCard}>
           <DetailRow icon="timer" label="寝つくまで" value={`${record.latencyMinutes} 分`} />
-          <DetailRow icon="hotel" label="昼寝" value={record.napMinutes > 0 ? `${record.napMinutes} 分` : "なし"} />
+          <DetailRow icon="hotel" label="昼寝" value={record.napMinutes > 0 ? `${record.napMinutes} 分` : "なし"} last />
         </Card>
 
         <SectionLabel title="日中のようす" />
@@ -65,7 +65,7 @@ export default function RecordDetailScreen() {
         </View>
         <Card style={styles.listCard}>
           <DetailRow icon="local-cafe" label="カフェイン" value={record.caffeine ? "あり" : "なし"} valueColor={record.caffeine ? colors.warning : colors.success} />
-          <DetailRow icon="healing" label="頭痛" value={record.headache ? "あり" : "なし"} valueColor={record.headache ? colors.error : colors.success} />
+          <DetailRow icon="healing" label="頭痛" value={record.headache ? "あり" : "なし"} valueColor={record.headache ? colors.error : colors.success} last />
         </Card>
 
         {record.note ? <><SectionLabel title="メモ" /><Card><Text style={[styles.note, { color: colors.foreground }]}>{record.note}</Text></Card></> : null}
@@ -75,9 +75,9 @@ export default function RecordDetailScreen() {
   );
 }
 
-function DetailRow({ icon, label, value, valueColor }: { icon: React.ComponentProps<typeof MaterialIcons>["name"]; label: string; value: string; valueColor?: string }) {
+function DetailRow({ icon, label, value, valueColor, last = false }: { icon: React.ComponentProps<typeof MaterialIcons>["name"]; label: string; value: string; valueColor?: string; last?: boolean }) {
   const colors = useColors();
-  return <View style={styles.detailRow}><View style={[styles.detailIcon, { backgroundColor: `${colors.primary}12` }]}><MaterialIcons name={icon} size={19} color={colors.primary} /></View><Text style={[styles.detailLabel, { color: colors.foreground }]}>{label}</Text><Text style={[styles.detailValue, { color: valueColor ?? colors.foreground }]}>{value}</Text></View>;
+  return <View style={[styles.detailRow, !last && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border }]}><View style={[styles.detailIcon, { backgroundColor: `${colors.primary}12` }]}><MaterialIcons name={icon} size={19} color={colors.primary} /></View><Text style={[styles.detailLabel, { color: colors.foreground }]}>{label}</Text><Text style={[styles.detailValue, { color: valueColor ?? colors.foreground }]}>{value}</Text></View>;
 }
 
 function ScoreCard({ label, value, accent, low, high }: { label: string; value: number; accent: string; low: string; high: string }) {
@@ -96,7 +96,7 @@ const styles = StyleSheet.create({
   heroTimes: { flexDirection: "row", alignItems: "center", gap: 10, borderTopColor: "#FFFFFF33", borderTopWidth: 1, paddingTop: 14 },
   heroTime: { color: "#FFFFFF", fontSize: 19, lineHeight: 26, fontWeight: "800" },
   listCard: { paddingVertical: 3 },
-  detailRow: { minHeight: 62, flexDirection: "row", alignItems: "center", gap: 11, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#E5E7EB", paddingVertical: 10 },
+  detailRow: { minHeight: 62, flexDirection: "row", alignItems: "center", gap: 11, paddingVertical: 10 },
   detailIcon: { width: 37, height: 37, borderRadius: 13, alignItems: "center", justifyContent: "center" },
   detailLabel: { flex: 1, fontSize: 15, lineHeight: 21, fontWeight: "700" },
   detailValue: { fontSize: 15, lineHeight: 21, fontWeight: "900" },

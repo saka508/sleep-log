@@ -5,9 +5,11 @@ import {
   clockValueForChart,
   correlation,
   createSampleRecords,
+  daysFromToday,
   formatDuration,
   sleepMinutesFromTimes,
   timeToMinutes,
+  todayKey,
 } from "../lib/sleep-utils";
 
 describe("sleep time calculation", () => {
@@ -46,6 +48,23 @@ describe("analysis data helpers", () => {
     expect(samples).toHaveLength(12);
     expect(new Set(samples.map((record) => record.date)).size).toBe(12);
     expect(samples.every((record) => record.isSample)).toBe(true);
+  });
+
+  it("stops sample data at yesterday so today still reads as 未記録", () => {
+    const dates = createSampleRecords().map((record) => record.date);
+    expect(dates).not.toContain(todayKey());
+    expect(dates.at(-1)).toBe(daysFromToday(-1));
+    expect(dates.at(0)).toBe(daysFromToday(-12));
+  });
+
+  it("builds the recent-days window on the local calendar", () => {
+    // The home screen compares record.date against daysFromToday(-6); a UTC
+    // boundary would slide this by a day for most of the day in JST.
+    const start = daysFromToday(-6);
+    const window = Array.from({ length: 7 }, (_, index) => daysFromToday(index - 6));
+    expect(window[0]).toBe(start);
+    expect(window.at(-1)).toBe(todayKey());
+    expect(window.filter((day) => day >= start && day <= todayKey())).toHaveLength(7);
   });
 });
 
