@@ -6,7 +6,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "react-native-reanimated";
 import { Platform, ScrollView, Text, View } from "react-native";
 import "@/lib/_core/nativewind-pressable";
-import { ThemeProvider } from "@/lib/theme-provider";
+import { ThemeProvider, useThemeContext } from "@/lib/theme-provider";
 import { SleepDataProvider } from "@/lib/sleep-store";
 import {
   SafeAreaFrameContext,
@@ -57,6 +57,15 @@ export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
   );
 }
 
+/**
+ * The app no longer overrides RN's Appearance, so `style="auto"` would follow
+ * the device rather than the theme the user picked here.
+ */
+function ThemedStatusBar() {
+  const { colorScheme } = useThemeContext();
+  return <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />;
+}
+
 export default function RootLayout() {
   const initialInsets = initialWindowMetrics?.insets ?? DEFAULT_WEB_INSETS;
   const initialFrame = initialWindowMetrics?.frame ?? DEFAULT_WEB_FRAME;
@@ -101,7 +110,7 @@ export default function RootLayout() {
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="(tabs)" />
         </Stack>
-        <StatusBar style="auto" />
+        <ThemedStatusBar />
       </SleepDataProvider>
     </GestureHandlerRootView>
   );
