@@ -1,6 +1,9 @@
 {
+  "id": "/sleep-log/",
   "name": "Sleep Log",
   "short_name": "Sleep Log",
+  "description": "睡眠時間と日中の体調を記録して、生活の傾向を振り返るアプリ",
+  "lang": "ja",
   "start_url": "/sleep-log/",
   "scope": "/sleep-log/",
   "display": "standalone",
@@ -10,8 +13,9 @@
   "icons": [
     {
       "src": "/sleep-log/icon.png",
-      "sizes": "512x512",
-      "type": "image/png"
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "any"
     }
   ]
 }

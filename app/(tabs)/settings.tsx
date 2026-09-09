@@ -7,20 +7,40 @@ import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { configureDailyReminder } from "@/lib/notification-service";
 import { useSleepData } from "@/lib/sleep-store";
-import { useThemeContext } from "@/lib/theme-provider";
+import { useThemeContext, type ThemePreference } from "@/lib/theme-provider";
 import { exportRecords, pickAndReadCsv, recordsFromCsv } from "@/lib/csv-service";
 
-type ThemeChoice = "light" | "dark";
+
+
+function isReminderTime(value: string) {
+  return /^([01]?\d|2[0-3]):[0-5]\d$/.test(value);
+}
 
 export default function SettingsScreen() {
   const colors = useColors();
   const { records, settings, updateSettings, importRecords, removeSampleRecords, addSampleRecords, clearAllRecords, isReady } = useSleepData();
-  const { colorScheme, setColorScheme } = useThemeContext();
+  const { colorScheme, preference, setPreference } = useThemeContext();
   const [reminderTime, setReminderTime] = useState(settings.reminderTime);
   const [busy, setBusy] = useState(false);
 
+  // Persist the typed time even while the reminder is off, so it is still there
+  // the next time the app opens. Rescheduling only matters when it is on.
+  const commitReminderTime = async () => {
+    if (reminderTime === settings.reminderTime) return;
+    if (!isReminderTime(reminderTime)) {
+      Alert.alert("時刻を確認してください", "HH:MM の24時間表記で入力してください。");
+      setReminderTime(settings.reminderTime);
+      return;
+    }
+    if (settings.reminderEnabled) {
+      await saveReminder(true);
+      return;
+    }
+    updateSettings({ reminderTime });
+  };
+
   const saveReminder = async (enabled: boolean) => {
-    if (enabled && !/^([01]?\d|2[0-3]):[0-5]\d$/.test(reminderTime)) {
+    if (enabled && !isReminderTime(reminderTime)) {
       Alert.alert("時刻を確認してください", "HH:MM の24時間表記で入力してください。");
       return;
     }
@@ -95,14 +115,14 @@ export default function SettingsScreen() {
           <ToggleRow icon="notifications-none" label="毎日の記録リマインダー" description={settings.reminderEnabled ? `${settings.reminderTime} に通知します` : "記録する時間を思い出す通知"} active={settings.reminderEnabled} onPress={() => void saveReminder(!settings.reminderEnabled)} />
           <View style={styles.timeField}>
             <View style={styles.timeCopy}><Text style={[styles.timeLabel, { color: colors.foreground }]}>通知時刻</Text><Text style={[styles.timeHint, { color: colors.muted }]}>例：21:30</Text></View>
-            <AppTextInput value={reminderTime} onChangeText={setReminderTime} onBlur={() => { if (settings.reminderEnabled) void saveReminder(true); }} style={styles.timeInput} keyboardType="numbers-and-punctuation" maxLength={5} />
+            <AppTextInput value={reminderTime} onChangeText={setReminderTime} onBlur={() => void commitReminderTime()} style={styles.timeInput} keyboardType="numbers-and-punctuation" maxLength={5} />
           </View>
         </Card>
 
         <SectionLabel title="表示" />
         <Card style={styles.formCard}>
           <View style={styles.themeRow}><View style={styles.timeCopy}><Text style={[styles.timeLabel, { color: colors.foreground }]}>テーマ</Text><Text style={[styles.timeHint, { color: colors.muted }]}>目にやさしい表示を選べます</Text></View><MaterialIcons name={colorScheme === "dark" ? "dark-mode" : "light-mode"} size={22} color={colors.primary} /></View>
-          <ChoicePills<ThemeChoice> value={colorScheme} onChange={setColorScheme} options={[{ value: "light", label: "ライト", icon: "light-mode" }, { value: "dark", label: "ダーク", icon: "dark-mode" }]} />
+          <ChoicePills<ThemePreference> value={preference} onChange={setPreference} options={[{ value: "system", label: "自動", icon: "brightness-auto" }, { value: "light", label: "ライト", icon: "light-mode" }, { value: "dark", label: "ダーク", icon: "dark-mode" }]} />
         </Card>
 
         <SectionLabel title="データ" />
@@ -119,7 +139,7 @@ export default function SettingsScreen() {
         </Card>
 
         <SectionLabel title="危険な操作" />
-        <Card style={styles.dangerCard}>
+        <Card style={[styles.dangerCard, { borderColor: `${colors.error}4D` }]}>
           <View style={styles.dataIntro}><View style={[styles.dataIcon, { backgroundColor: `${colors.error}16` }]}><MaterialIcons name="delete-forever" size={21} color={colors.error} /></View><View style={styles.timeCopy}><Text style={[styles.timeLabel, { color: colors.foreground }]}>すべての記録を削除</Text><Text style={[styles.timeHint, { color: colors.muted }]}>先にCSVへ書き出しておくと安心です。</Text></View></View>
           <PrimaryButton label="全記録を削除" icon="delete-forever" secondary onPress={confirmClear} />
         </Card>
@@ -142,7 +162,7 @@ const styles = StyleSheet.create({
   dataIntro: { flexDirection: "row", alignItems: "center", gap: 11 },
   dataIcon: { width: 41, height: 41, borderRadius: 14, alignItems: "center", justifyContent: "center" },
   sampleText: { fontSize: 13, lineHeight: 20 },
-  dangerCard: { gap: 13, borderColor: "#F1D7D7" },
+  dangerCard: { gap: 13 },
   disclaimer: { flexDirection: "row", alignItems: "flex-start", gap: 8, padding: 13, borderRadius: 14 },
   disclaimerText: { flex: 1, fontSize: 12, lineHeight: 18 },
 });

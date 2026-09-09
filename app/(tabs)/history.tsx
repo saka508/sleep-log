@@ -2,15 +2,16 @@ import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { router } from "expo-router";
 import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 
-import { EmptyState, PageHeader, SmallStatus } from "@/components/sleep-ui";
+import { EmptyState, IconButton, PageHeader, SmallStatus } from "@/components/sleep-ui";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { useSleepData } from "@/lib/sleep-store";
-import { formatDuration, formatMonthDay } from "@/lib/sleep-utils";
+import { formatDuration, formatMonthDay, todayKey } from "@/lib/sleep-utils";
 
 export default function HistoryScreen() {
   const colors = useColors();
   const { records, isReady } = useSleepData();
+  const addRecord = () => router.push({ pathname: "/record", params: { date: todayKey() } });
 
   if (!isReady) return <ScreenContainer />;
 
@@ -21,7 +22,7 @@ export default function HistoryScreen() {
         keyExtractor={(item) => item.date}
         contentContainerStyle={[styles.content, records.length === 0 && styles.emptyList]}
         showsVerticalScrollIndicator={false}
-        ListHeaderComponent={<PageHeader title="履歴" subtitle={`${records.length} 件の睡眠記録`} />}
+        ListHeaderComponent={<PageHeader title="履歴" subtitle={`${records.length} 件の睡眠記録`} action={<IconButton icon="add" label="記録を追加" tone="primary" onPress={addRecord} />} />}
         ListEmptyComponent={<EmptyState title="記録がまだありません" description="今日タブから睡眠と体調を記録すると、ここに日付順で表示されます。" icon="calendar-month" />}
         renderItem={({ item }) => (
           <Pressable

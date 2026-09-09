@@ -6,14 +6,17 @@ import { Card, MetricCard, PageHeader, PrimaryButton, SectionLabel, SmallStatus 
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { useSleepData } from "@/lib/sleep-store";
-import { formatDate, formatDuration, getSleepStats, todayKey } from "@/lib/sleep-utils";
+import { daysFromToday, formatDate, formatDuration, getSleepStats, todayKey } from "@/lib/sleep-utils";
 
 export default function TodayScreen() {
   const colors = useColors();
   const { records, isReady } = useSleepData();
   const today = todayKey();
   const record = records.find((item) => item.date === today);
-  const recent = records.filter((item) => item.date >= new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10));
+  // Today and the previous six days, on the device's local calendar. Using UTC
+  // here would shift the window by a day for most of the day in JST.
+  const windowStart = daysFromToday(-6);
+  const recent = records.filter((item) => item.date >= windowStart && item.date <= today);
   const stats = getSleepStats(recent);
   const missing = record ? [] : ["睡眠時刻", "眠気", "頭の冴え"];
   const openRecord = () => router.push({ pathname: "/record", params: { date: today } });
@@ -28,7 +31,7 @@ export default function TodayScreen() {
         <PageHeader
           title="今日"
           subtitle={formatDate(today)}
-          action={<SmallStatus label={record ? "記録済み" : "未記録"} tone={record ? "success" : "warning"} />}
+          action={<SmallStatus label={record?.isSample ? "サンプル" : record ? "記録済み" : "未記録"} tone={record?.isSample ? "muted" : record ? "success" : "warning"} />}
         />
 
         <Card style={[styles.heroCard, { backgroundColor: colors.primary, borderColor: colors.primary }]}>
@@ -87,7 +90,7 @@ export default function TodayScreen() {
             <MaterialIcons name="insights" size={22} color={colors.primary} />
           </View>
           <View style={styles.missingCopy}>
-            <Text style={[styles.missingTitle, { color: colors.foreground }]}>直近 {recent.length} 日の平均睡眠</Text>
+            <Text style={[styles.missingTitle, { color: colors.foreground }]}>直近7日の平均睡眠（{recent.length} 件）</Text>
             <Text style={[styles.insightValue, { color: colors.primary }]}>{recent.length ? formatDuration(stats.averageSleepMinutes, true) : "記録が増えると表示されます"}</Text>
             <Text style={[styles.missingText, { color: colors.muted }]}>分析タブでは、眠気や頭の冴えとの関係をグラフで確認できます。</Text>
           </View>
