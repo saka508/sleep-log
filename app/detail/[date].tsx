@@ -6,7 +6,7 @@ import { Card, EmptyState, IconButton, PageHeader, PrimaryButton, SectionLabel, 
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { useSleepData } from "@/lib/sleep-store";
-import { formatDate, formatDuration } from "@/lib/sleep-utils";
+import { formatDate, formatDuration, getHeadacheFeatureLabel } from "@/lib/sleep-utils";
 
 export default function RecordDetailScreen() {
   const colors = useColors();
@@ -65,10 +65,14 @@ export default function RecordDetailScreen() {
         </View>
         <Card style={styles.listCard}>
           <DetailRow icon="local-cafe" label="カフェイン" value={record.caffeine ? "あり" : "なし"} valueColor={record.caffeine ? colors.warning : colors.success} />
-          <DetailRow icon="healing" label="頭痛" value={record.headache ? "あり" : "なし"} valueColor={record.headache ? colors.error : colors.success} last />
+          {record.caffeine && record.caffeineTime ? <DetailRow icon="schedule" label="摂取時刻" value={record.caffeineTime} /> : null}
+          {record.caffeine && record.caffeineNote ? <DetailRow icon="notes" label="飲み物・量" value={record.caffeineNote} /> : null}
+          <DetailRow icon="healing" label="頭痛" value={record.headache ? "あり" : "なし"} valueColor={record.headache ? colors.error : colors.success} last={!record.headache} />
+          {record.headache ? <DetailRow icon="speed" label="頭痛の強さ" value={`${record.headacheIntensity ?? 0} / 10`} last={!record.headacheFeatures?.length} /> : null}
+          {record.headache && record.headacheFeatures?.length ? <DetailRow icon="fact-check" label="頭痛の特徴" value={record.headacheFeatures.map(getHeadacheFeatureLabel).join("、")} last /> : null}
         </Card>
 
-        {record.note ? <><SectionLabel title="メモ" /><Card><Text style={[styles.note, { color: colors.foreground }]}>{record.note}</Text></Card></> : null}
+        {record.note ? <><SectionLabel title="その日の体調メモ" /><Card><Text style={[styles.note, { color: colors.foreground }]}>{record.note}</Text></Card></> : null}
         <View style={[styles.disclaimer, { backgroundColor: `${colors.muted}12` }]}><MaterialIcons name="info-outline" size={17} color={colors.muted} /><Text style={[styles.disclaimerText, { color: colors.muted }]}>この記録は生活の振り返り用です。症状が気になる場合は、保護者や医療機関に相談してください。</Text></View>
       </ScrollView>
     </ScreenContainer>
@@ -99,7 +103,7 @@ const styles = StyleSheet.create({
   detailRow: { minHeight: 62, flexDirection: "row", alignItems: "center", gap: 11, paddingVertical: 10 },
   detailIcon: { width: 37, height: 37, borderRadius: 13, alignItems: "center", justifyContent: "center" },
   detailLabel: { flex: 1, fontSize: 15, lineHeight: 21, fontWeight: "700" },
-  detailValue: { fontSize: 15, lineHeight: 21, fontWeight: "900" },
+  detailValue: { maxWidth: "52%", flexShrink: 1, textAlign: "right", fontSize: 15, lineHeight: 21, fontWeight: "900" },
   scores: { flexDirection: "row", gap: 12 },
   scoreCard: { flex: 1, gap: 6, padding: 15 },
   scoreLabel: { fontSize: 13, lineHeight: 18, fontWeight: "800" },

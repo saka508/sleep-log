@@ -2,7 +2,6 @@ import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { ReactNode, useMemo } from "react";
 import {
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -177,6 +176,7 @@ export function ScorePicker({
           key={index}
           accessibilityRole="button"
           accessibilityLabel={`${index}`}
+          accessibilityState={{ selected: index === value }}
           onPress={() => onChange(index)}
           style={({ pressed }) => [
             styles.scoreDot,
@@ -198,7 +198,7 @@ export function ChoicePills<T extends string>({
 }: {
   value: T;
   onChange: (value: T) => void;
-  options: Array<{ value: T; label: string; icon?: IconName }>;
+  options: { value: T; label: string; icon?: IconName }[];
 }) {
   const colors = useColors();
   return (
@@ -211,6 +211,46 @@ export function ChoicePills<T extends string>({
             accessibilityRole="radio"
             accessibilityState={{ selected }}
             onPress={() => onChange(option.value)}
+            style={({ pressed }) => [
+              styles.choicePill,
+              { backgroundColor: selected ? `${colors.primary}16` : colors.surface, borderColor: selected ? colors.primary : colors.border },
+              pressed && styles.pressed,
+            ]}
+          >
+            {option.icon ? <MaterialIcons name={option.icon} size={18} color={selected ? colors.primary : colors.muted} /> : null}
+            <Text style={[styles.choicePillText, { color: selected ? colors.primary : colors.foreground }]}>{option.label}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+export function MultiChoicePills<T extends string>({
+  values,
+  onChange,
+  options,
+  accessibilityLabel,
+}: {
+  values: T[];
+  onChange: (values: T[]) => void;
+  options: { value: T; label: string; icon?: IconName }[];
+  accessibilityLabel: string;
+}) {
+  const colors = useColors();
+  const selectedValues = new Set(values);
+  return (
+    <View style={styles.choicePills} accessibilityLabel={accessibilityLabel}>
+      {options.map((option) => {
+        const selected = selectedValues.has(option.value);
+        const toggle = () => onChange(selected ? values.filter((value) => value !== option.value) : [...values, option.value]);
+        return (
+          <Pressable
+            key={option.value}
+            accessibilityRole="checkbox"
+            accessibilityLabel={option.label}
+            accessibilityState={{ checked: selected }}
+            onPress={toggle}
             style={({ pressed }) => [
               styles.choicePill,
               { backgroundColor: selected ? `${colors.primary}16` : colors.surface, borderColor: selected ? colors.primary : colors.border },
@@ -284,7 +324,7 @@ export function SegmentedControl<T extends string>({
 }: {
   value: T;
   onChange: (value: T) => void;
-  options: Array<{ value: T; label: string }>;
+  options: { value: T; label: string }[];
 }) {
   const colors = useColors();
   return (
