@@ -1,3 +1,14 @@
+export const HEADACHE_FEATURE_OPTIONS = [
+  { value: "oneSide", label: "片側" },
+  { value: "bothSides", label: "両側" },
+  { value: "aroundEyes", label: "目の周辺" },
+  { value: "nausea", label: "吐き気" },
+  { value: "lightOrSound", label: "光や音がつらい" },
+  { value: "other", label: "その他" },
+] as const;
+
+export type HeadacheFeature = (typeof HEADACHE_FEATURE_OPTIONS)[number]["value"];
+
 export type SleepRecord = {
   id: string;
   date: string;
@@ -9,7 +20,11 @@ export type SleepRecord = {
   sleepiness: number;
   clarity: number;
   caffeine: boolean;
+  caffeineTime?: string;
+  caffeineNote?: string;
   headache: boolean;
+  headacheIntensity?: number;
+  headacheFeatures?: HeadacheFeature[];
   note: string;
   isSample?: boolean;
   createdAt: string;
@@ -33,6 +48,44 @@ export const DEFAULT_SETTINGS: AppSettings = {
   reminderEnabled: false,
   reminderTime: "21:30",
 };
+
+const HEADACHE_FEATURE_VALUES = new Set<HeadacheFeature>(HEADACHE_FEATURE_OPTIONS.map((option) => option.value));
+
+export function getHeadacheFeatureLabel(feature: HeadacheFeature) {
+  return HEADACHE_FEATURE_OPTIONS.find((option) => option.value === feature)?.label ?? feature;
+}
+
+/** Normalize records loaded from AsyncStorage or CSV without rejecting legacy data. */
+export function normalizeSleepRecord(value: Partial<SleepRecord>): SleepRecord | null {
+  if (!value.date || !value.id || !value.bedTime || !value.wakeTime) return null;
+  const safeScore = (score: unknown) => Math.max(0, Math.min(10, Math.round(Number(score) || 0)));
+  const headache = Boolean(value.headache);
+  const caffeine = Boolean(value.caffeine);
+  const headacheFeatures = Array.isArray(value.headacheFeatures)
+    ? [...new Set(value.headacheFeatures.filter((feature): feature is HeadacheFeature => HEADACHE_FEATURE_VALUES.has(feature as HeadacheFeature)))]
+    : [];
+  return {
+    id: value.date,
+    date: value.date,
+    bedTime: value.bedTime,
+    wakeTime: value.wakeTime,
+    sleepMinutes: Math.max(0, Number(value.sleepMinutes) || 0),
+    latencyMinutes: Math.max(0, Number(value.latencyMinutes) || 0),
+    napMinutes: Math.max(0, Number(value.napMinutes) || 0),
+    sleepiness: safeScore(value.sleepiness),
+    clarity: safeScore(value.clarity),
+    caffeine,
+    caffeineTime: caffeine && typeof value.caffeineTime === "string" && isTime(value.caffeineTime) ? value.caffeineTime : "",
+    caffeineNote: caffeine && typeof value.caffeineNote === "string" ? value.caffeineNote.trim() : "",
+    headache,
+    headacheIntensity: headache ? safeScore(value.headacheIntensity) : 0,
+    headacheFeatures: headache ? headacheFeatures : [],
+    note: typeof value.note === "string" ? value.note : "",
+    isSample: Boolean(value.isSample),
+    createdAt: value.createdAt ?? new Date().toISOString(),
+    updatedAt: value.updatedAt ?? new Date().toISOString(),
+  };
+}
 
 export const DAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"];
 
@@ -132,7 +185,7 @@ export function average(values: number[]) {
   return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
-export function correlation(points: Array<{ x: number; y: number }>) {
+export function correlation(points: { x: number; y: number }[]) {
   if (points.length < 3) return null;
   const xMean = average(points.map((point) => point.x));
   const yMean = average(points.map((point) => point.y));

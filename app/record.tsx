@@ -3,11 +3,11 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
 
-import { AppTextInput, Card, ChoicePills, FieldLabel, PageHeader, PrimaryButton, ScorePicker, SectionLabel } from "@/components/sleep-ui";
+import { AppTextInput, Card, ChoicePills, FieldLabel, MultiChoicePills, PageHeader, PrimaryButton, ScorePicker, SectionLabel } from "@/components/sleep-ui";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { useSleepData } from "@/lib/sleep-store";
-import { formatDate, isDateKey, isTime, sleepMinutesFromTimes, todayKey, type SleepRecord } from "@/lib/sleep-utils";
+import { formatDate, HEADACHE_FEATURE_OPTIONS, isDateKey, isTime, sleepMinutesFromTimes, todayKey, type HeadacheFeature, type SleepRecord } from "@/lib/sleep-utils";
 
 type BoolChoice = "yes" | "no";
 
@@ -23,10 +23,15 @@ export default function RecordScreen() {
   const [sleepMinutes, setSleepMinutes] = useState("450");
   const [latencyMinutes, setLatencyMinutes] = useState("20");
   const [napMinutes, setNapMinutes] = useState("0");
+  const [nap, setNap] = useState<BoolChoice>("no");
   const [sleepiness, setSleepiness] = useState(4);
   const [clarity, setClarity] = useState(7);
   const [caffeine, setCaffeine] = useState<BoolChoice>("no");
+  const [caffeineTime, setCaffeineTime] = useState("");
+  const [caffeineNote, setCaffeineNote] = useState("");
   const [headache, setHeadache] = useState<BoolChoice>("no");
+  const [headacheIntensity, setHeadacheIntensity] = useState(0);
+  const [headacheFeatures, setHeadacheFeatures] = useState<HeadacheFeature[]>([]);
   const [note, setNote] = useState("");
 
   useEffect(() => {
@@ -41,10 +46,15 @@ export default function RecordScreen() {
       setSleepMinutes("450");
       setLatencyMinutes("20");
       setNapMinutes("0");
+      setNap("no");
       setSleepiness(4);
       setClarity(7);
       setCaffeine("no");
+      setCaffeineTime("");
+      setCaffeineNote("");
       setHeadache("no");
+      setHeadacheIntensity(0);
+      setHeadacheFeatures([]);
       setNote("");
       return;
     }
@@ -54,10 +64,15 @@ export default function RecordScreen() {
     setSleepMinutes(String(source.sleepMinutes));
     setLatencyMinutes(String(source.latencyMinutes));
     setNapMinutes(String(source.napMinutes));
+    setNap(source.napMinutes > 0 ? "yes" : "no");
     setSleepiness(source.sleepiness);
     setClarity(source.clarity);
     setCaffeine(source.caffeine ? "yes" : "no");
+    setCaffeineTime(source.caffeineTime ?? "");
+    setCaffeineNote(source.caffeineNote ?? "");
     setHeadache(source.headache ? "yes" : "no");
+    setHeadacheIntensity(source.headacheIntensity ?? 0);
+    setHeadacheFeatures(source.headacheFeatures ?? []);
     setNote(source.note);
   }, [existing, targetDate]);
 
@@ -79,7 +94,7 @@ export default function RecordScreen() {
   const save = () => {
     const minutes = Number(sleepMinutes);
     const latency = Number(latencyMinutes);
-    const nap = Number(napMinutes);
+    const napDuration = nap === "yes" ? Number(napMinutes) : 0;
     if (!isDateKey(date)) {
       Alert.alert("日付を確認してください", "YYYY-MM-DD の形式で入力してください。");
       return;
@@ -88,8 +103,12 @@ export default function RecordScreen() {
       Alert.alert("時刻を確認してください", "就寝・起床時刻は HH:MM の24時間表記で入力してください。");
       return;
     }
-    if (!Number.isFinite(minutes) || minutes <= 0 || !Number.isFinite(latency) || latency < 0 || !Number.isFinite(nap) || nap < 0) {
-      Alert.alert("数値を確認してください", "睡眠時間は1分以上、寝つき・昼寝は0分以上で入力してください。");
+    if (!Number.isFinite(minutes) || minutes <= 0 || !Number.isFinite(latency) || latency < 0 || !Number.isFinite(napDuration) || (nap === "yes" && napDuration <= 0)) {
+      Alert.alert("数値を確認してください", "睡眠時間は1分以上、寝つきは0分以上、昼寝ありの場合は1分以上で入力してください。");
+      return;
+    }
+    if (caffeine === "yes" && caffeineTime.trim() && !isTime(caffeineTime)) {
+      Alert.alert("摂取時刻を確認してください", "HH:MM の24時間表記で入力するか、空欄にしてください。");
       return;
     }
     const now = new Date().toISOString();
@@ -101,11 +120,15 @@ export default function RecordScreen() {
       wakeTime,
       sleepMinutes: Math.round(minutes),
       latencyMinutes: Math.round(latency),
-      napMinutes: Math.round(nap),
+      napMinutes: Math.round(napDuration),
       sleepiness,
       clarity,
       caffeine: caffeine === "yes",
+      caffeineTime: caffeine === "yes" ? caffeineTime.trim() : "",
+      caffeineNote: caffeine === "yes" ? caffeineNote.trim() : "",
       headache: headache === "yes",
+      headacheIntensity: headache === "yes" ? headacheIntensity : 0,
+      headacheFeatures: headache === "yes" ? headacheFeatures : [],
       note: note.trim(),
       isSample: false,
       createdAt: clashing?.createdAt ?? existing?.createdAt ?? now,
@@ -113,7 +136,9 @@ export default function RecordScreen() {
     };
     const commit = () => {
       saveRecord(next);
-      router.replace({ pathname: "/detail/[date]", params: { date } });
+      Alert.alert("保存しました", "記録を端末内に保存しました。", [
+        { text: "OK", onPress: () => router.replace({ pathname: "/detail/[date]", params: { date } }) },
+      ]);
     };
     // Records are keyed by date, so saving onto a date that already has one
     // replaces it. Ask first instead of losing the existing entry silently.
@@ -134,7 +159,7 @@ export default function RecordScreen() {
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === "ios" ? "padding" : undefined}>
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
           <PageHeader
-            title={existing ? "記録を編集" : "睡眠を記録"}
+            title={existing ? "記録を編集" : "1日の記録"}
             subtitle={formatDate(targetDate)}
             action={<PrimaryButton label="閉じる" secondary onPress={() => router.back()} />}
           />
@@ -173,22 +198,26 @@ export default function RecordScreen() {
                 <PrimaryButton label="再計算" secondary onPress={recalculate} />
               </View>
             </View>
-            <View style={styles.twoColumns}>
-              <View style={styles.flexField}>
-                <FieldLabel label="寝つくまで" />
-                <View style={styles.withUnit}>
-                  <AppTextInput style={styles.numberInput} value={latencyMinutes} onChangeText={setLatencyMinutes} keyboardType="number-pad" />
-                  <Text style={[styles.unit, { color: colors.muted }]}>分</Text>
-                </View>
+            <View style={styles.formGroup}>
+              <FieldLabel label="寝つくまで" />
+              <View style={styles.withUnit}>
+                <AppTextInput style={styles.numberInput} value={latencyMinutes} onChangeText={setLatencyMinutes} keyboardType="number-pad" />
+                <Text style={[styles.unit, { color: colors.muted }]}>分</Text>
               </View>
-              <View style={styles.flexField}>
-                <FieldLabel label="昼寝時間" hint="なしは0" />
+            </View>
+            <View style={styles.formGroup}>
+              <FieldLabel label="昼寝" />
+              <ChoicePills value={nap} onChange={setNap} options={[{ value: "no", label: "なし", icon: "block" }, { value: "yes", label: "あり", icon: "hotel" }]} />
+            </View>
+            {nap === "yes" ? (
+              <View style={[styles.conditionalFields, { backgroundColor: `${colors.primary}09`, borderColor: `${colors.primary}28` }]}>
+                <FieldLabel label="昼寝時間" hint="合計時間" />
                 <View style={styles.withUnit}>
                   <AppTextInput style={styles.numberInput} value={napMinutes} onChangeText={setNapMinutes} keyboardType="number-pad" />
                   <Text style={[styles.unit, { color: colors.muted }]}>分</Text>
                 </View>
               </View>
-            </View>
+            ) : null}
           </Card>
 
           <SectionLabel title="日中のようす" />
@@ -207,13 +236,37 @@ export default function RecordScreen() {
               <FieldLabel label="カフェイン" />
               <ChoicePills value={caffeine} onChange={setCaffeine} options={[{ value: "no", label: "なし", icon: "block" }, { value: "yes", label: "あり", icon: "local-cafe" }]} />
             </View>
+            {caffeine === "yes" ? (
+              <View style={[styles.conditionalFields, { backgroundColor: `${colors.warning}09`, borderColor: `${colors.warning}28` }]}>
+                <View style={styles.formGroup}>
+                  <FieldLabel label="摂取時刻" hint="任意" />
+                  <AppTextInput accessibilityLabel="カフェインの摂取時刻" value={caffeineTime} onChangeText={setCaffeineTime} placeholder="例：14:30" keyboardType="numbers-and-punctuation" />
+                </View>
+                <View style={styles.formGroup}>
+                  <FieldLabel label="飲み物・量" hint="任意" />
+                  <AppTextInput accessibilityLabel="カフェインの飲み物または量" value={caffeineNote} onChangeText={setCaffeineNote} placeholder="例：コーヒー 1杯" />
+                </View>
+              </View>
+            ) : null}
             <View style={styles.formGroup}>
               <FieldLabel label="頭痛" />
               <ChoicePills value={headache} onChange={setHeadache} options={[{ value: "no", label: "なし", icon: "sentiment-satisfied" }, { value: "yes", label: "あり", icon: "healing" }]} />
             </View>
+            {headache === "yes" ? (
+              <View style={[styles.conditionalFields, { backgroundColor: `${colors.error}08`, borderColor: `${colors.error}24` }]}>
+                <View style={styles.formGroup}>
+                  <FieldLabel label="頭痛の強さ" hint={`${headacheIntensity} / 10`} />
+                  <ScorePicker value={headacheIntensity} onChange={setHeadacheIntensity} accent={colors.error} accessibilityLabel="頭痛の強さを選択" />
+                </View>
+                <View style={styles.formGroup}>
+                  <FieldLabel label="頭痛の特徴" hint="複数選択可" />
+                  <MultiChoicePills values={headacheFeatures} onChange={setHeadacheFeatures} options={[...HEADACHE_FEATURE_OPTIONS]} accessibilityLabel="頭痛の特徴" />
+                </View>
+              </View>
+            ) : null}
           </Card>
 
-          <SectionLabel title="メモ" />
+          <SectionLabel title="その日の体調メモ" />
           <Card>
             <AppTextInput value={note} onChangeText={setNote} placeholder="例：部活のあとで少し昼寝。朝は目覚めがよかった。" multiline textAlignVertical="top" style={styles.noteInput} />
           </Card>
@@ -235,6 +288,7 @@ const styles = StyleSheet.create({
   autoText: { fontSize: 12, lineHeight: 18 },
   formCard: { gap: 14 },
   formGroup: { gap: 0 },
+  conditionalFields: { gap: 12, padding: 12, borderWidth: 1, borderRadius: 14 },
   twoColumns: { flexDirection: "row", gap: 12 },
   flexField: { flex: 1 },
   withUnit: { flexDirection: "row", alignItems: "center", gap: 7 },

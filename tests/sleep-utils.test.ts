@@ -7,6 +7,7 @@ import {
   createSampleRecords,
   daysFromToday,
   formatDuration,
+  normalizeSleepRecord,
   sleepMinutesFromTimes,
   timeToMinutes,
   todayKey,
@@ -81,7 +82,11 @@ describe("CSV import and export", () => {
       sleepiness: 4,
       clarity: 7,
       caffeine: true,
-      headache: false,
+      caffeineTime: "14:30",
+      caffeineNote: "コーヒー 1杯",
+      headache: true,
+      headacheIntensity: 6,
+      headacheFeatures: ["oneSide", "nausea", "lightOrSound"],
       note: "部活のあと、少し休憩",
       createdAt: "2026-09-09T00:00:00.000Z",
       updatedAt: "2026-09-09T00:00:00.000Z",
@@ -93,8 +98,56 @@ describe("CSV import and export", () => {
       date: "2026-09-09",
       sleepMinutes: 450,
       caffeine: true,
-      headache: false,
+      caffeineTime: "14:30",
+      caffeineNote: "コーヒー 1杯",
+      headache: true,
+      headacheIntensity: 6,
+      headacheFeatures: ["oneSide", "nausea", "lightOrSound"],
       note: "部活のあと、少し休憩",
+    });
+    expect(csv).toContain("片側／吐き気／光や音がつらい");
+  });
+
+  it("imports a Phase 1 CSV with all original columns and safe defaults", () => {
+    const legacyCsv = "日付,就寝時刻,起床時刻,実睡眠時間（分）,寝つくまで（分）,昼寝時間（分）,眠気（0-10）,頭の冴え（0-10）,カフェイン,頭痛,メモ\n2026-09-08,23:45,07:10,425,15,0,3,8,なし,なし,旧形式";
+
+    expect(recordsFromCsv(legacyCsv)[0]).toMatchObject({
+      date: "2026-09-08",
+      caffeineTime: "",
+      caffeineNote: "",
+      headacheIntensity: 0,
+      headacheFeatures: [],
+      note: "旧形式",
+    });
+  });
+});
+
+describe("stored record compatibility", () => {
+  it("normalizes a record saved before the detailed fields existed", () => {
+    const normalized = normalizeSleepRecord({
+      id: "2026-09-07", date: "2026-09-07", bedTime: "00:10", wakeTime: "07:00",
+      sleepMinutes: 390, latencyMinutes: 25, napMinutes: 0, sleepiness: 5, clarity: 6,
+      caffeine: false, headache: false, note: "旧データ",
+      createdAt: "2026-09-07T00:00:00.000Z", updatedAt: "2026-09-07T00:00:00.000Z",
+    });
+
+    expect(normalized).toMatchObject({
+      caffeineTime: "", caffeineNote: "", headacheIntensity: 0, headacheFeatures: [],
+    });
+  });
+
+  it("preserves valid detailed fields through JSON storage", () => {
+    const stored = JSON.parse(JSON.stringify({
+      id: "2026-09-09", date: "2026-09-09", bedTime: "23:30", wakeTime: "07:00",
+      sleepMinutes: 450, latencyMinutes: 20, napMinutes: 30, sleepiness: 4, clarity: 7,
+      caffeine: true, caffeineTime: "15:00", caffeineNote: "紅茶 1杯",
+      headache: true, headacheIntensity: 4, headacheFeatures: ["aroundEyes", "other"], note: "",
+      createdAt: "2026-09-09T00:00:00.000Z", updatedAt: "2026-09-09T00:00:00.000Z",
+    }));
+
+    expect(normalizeSleepRecord(stored)).toMatchObject({
+      napMinutes: 30, caffeineTime: "15:00", caffeineNote: "紅茶 1杯",
+      headacheIntensity: 4, headacheFeatures: ["aroundEyes", "other"],
     });
   });
 });

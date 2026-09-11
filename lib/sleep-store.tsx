@@ -6,6 +6,7 @@ import {
   DEFAULT_SETTINGS,
   type AppSettings,
   type SleepRecord,
+  normalizeSleepRecord,
   sortRecords,
 } from "@/lib/sleep-utils";
 import {
@@ -39,28 +40,6 @@ const initialState: SleepDataState = {
   settings: DEFAULT_SETTINGS,
 };
 
-function normalizeRecord(value: Partial<SleepRecord>): SleepRecord | null {
-  if (!value.date || !value.id || !value.bedTime || !value.wakeTime) return null;
-  const safeScore = (score: unknown) => Math.max(0, Math.min(10, Number(score) || 0));
-  return {
-    id: value.date,
-    date: value.date,
-    bedTime: value.bedTime,
-    wakeTime: value.wakeTime,
-    sleepMinutes: Math.max(0, Number(value.sleepMinutes) || 0),
-    latencyMinutes: Math.max(0, Number(value.latencyMinutes) || 0),
-    napMinutes: Math.max(0, Number(value.napMinutes) || 0),
-    sleepiness: safeScore(value.sleepiness),
-    clarity: safeScore(value.clarity),
-    caffeine: Boolean(value.caffeine),
-    headache: Boolean(value.headache),
-    note: typeof value.note === "string" ? value.note : "",
-    isSample: Boolean(value.isSample),
-    createdAt: value.createdAt ?? new Date().toISOString(),
-    updatedAt: value.updatedAt ?? new Date().toISOString(),
-  };
-}
-
 export function SleepDataProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<SleepDataState>(initialState);
   const [isReady, setIsReady] = useState(false);
@@ -72,7 +51,7 @@ export function SleepDataProvider({ children }: { children: React.ReactNode }) {
         if (saved) {
           const parsed = JSON.parse(saved) as Partial<SleepDataState>;
           const records = Array.isArray(parsed.records)
-            ? parsed.records.map(normalizeRecord).filter((record): record is SleepRecord => record !== null)
+            ? parsed.records.map(normalizeSleepRecord).filter((record): record is SleepRecord => record !== null)
             : [];
           setState({
             records: sortRecords(records),
@@ -110,7 +89,7 @@ export function SleepDataProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const importRecords = useCallback((incoming: SleepRecord[]) => {
-    const valid = incoming.map(normalizeRecord).filter((record): record is SleepRecord => record !== null);
+    const valid = incoming.map(normalizeSleepRecord).filter((record): record is SleepRecord => record !== null);
     setState((current) => {
       const byDate = new Map(current.records.map((record) => [record.date, record]));
       valid.forEach((record) => {

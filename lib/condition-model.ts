@@ -1,4 +1,4 @@
-import { sortRecords, type SleepRecord } from "./sleep-utils";
+import { sortRecords, type HeadacheFeature, type SleepRecord } from "./sleep-utils";
 
 /**
  * Origin of a domain value. Keep this deliberately small until an actual
@@ -44,6 +44,8 @@ export type NutritionCondition = {
   waterMilliliters?: number;
   meals?: string[];
   caffeineConsumed?: boolean;
+  caffeineTime?: string;
+  caffeineNote?: string;
 };
 
 export type EnvironmentCondition = {
@@ -60,6 +62,8 @@ export type SubjectiveCondition = {
   fatigue?: number;
   clarity?: number;
   headache?: boolean;
+  headacheIntensity?: number;
+  headacheFeatures?: HeadacheFeature[];
   muscleFatigue?: number;
 };
 
@@ -97,12 +101,16 @@ export function dailyConditionFromSleepRecord(record: SleepRecord): DailyConditi
     nutrition: {
       source: "manual",
       caffeineConsumed: record.caffeine,
+      caffeineTime: record.caffeineTime,
+      caffeineNote: record.caffeineNote,
     },
     subjective: {
       source: "manual",
       sleepiness: record.sleepiness,
       clarity: record.clarity,
       headache: record.headache,
+      headacheIntensity: record.headacheIntensity,
+      headacheFeatures: record.headacheFeatures,
     },
     note: record.note || undefined,
     createdAt: record.createdAt,
