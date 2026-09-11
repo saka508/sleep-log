@@ -4,7 +4,7 @@ import { sortRecords, type HeadacheFeature, type SleepRecord } from "./sleep-uti
  * Origin of a domain value. Keep this deliberately small until an actual
  * Health/wearable adapter needs more metadata.
  */
-export type DataSource = "manual" | "wearable" | "health";
+export type DataSource = "manual" | "wearable" | "health" | "api";
 
 export type SleepCondition = {
   source: DataSource;
@@ -54,6 +54,9 @@ export type EnvironmentCondition = {
   weather?: string;
   temperatureCelsius?: number;
   humidityPercent?: number;
+  weatherCode?: number;
+  fetchedAt?: string;
+  provider?: string;
 };
 
 export type SubjectiveCondition = {
@@ -112,6 +115,17 @@ export function dailyConditionFromSleepRecord(record: SleepRecord): DailyConditi
       headacheIntensity: record.headacheIntensity,
       headacheFeatures: record.headacheFeatures,
     },
+    ...(record.weather ? {
+      environment: {
+        source: "api" as const,
+        pressureHpa: record.weather.pressureHpa,
+        weather: record.weather.condition,
+        temperatureCelsius: record.weather.temperatureC,
+        weatherCode: record.weather.weatherCode,
+        fetchedAt: record.weather.fetchedAt,
+        provider: record.weather.source,
+      },
+    } : {}),
     note: record.note || undefined,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,

@@ -1,13 +1,14 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
-import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Linking, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { AppTextInput, Card, ChoicePills, FieldLabel, MultiChoicePills, PageHeader, PrimaryButton, ScorePicker, SectionLabel } from "@/components/sleep-ui";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { useSleepData } from "@/lib/sleep-store";
-import { formatDate, HEADACHE_FEATURE_OPTIONS, isDateKey, isTime, sleepMinutesFromTimes, todayKey, type HeadacheFeature, type SleepRecord } from "@/lib/sleep-utils";
+import { formatAcquiredAt, formatDate, HEADACHE_FEATURE_OPTIONS, isDateKey, isTime, sleepMinutesFromTimes, todayKey, type HeadacheFeature, type SleepRecord, type WeatherSnapshot } from "@/lib/sleep-utils";
+import { fetchWeatherForCurrentLocation, OPEN_METEO_ATTRIBUTION_URL, WeatherError } from "@/lib/weather-service";
 
 type BoolChoice = "yes" | "no";
 
@@ -32,6 +33,9 @@ export default function RecordScreen() {
   const [headache, setHeadache] = useState<BoolChoice>("no");
   const [headacheIntensity, setHeadacheIntensity] = useState(0);
   const [headacheFeatures, setHeadacheFeatures] = useState<HeadacheFeature[]>([]);
+  const [weather, setWeather] = useState<WeatherSnapshot | undefined>();
+  const [weatherLoading, setWeatherLoading] = useState(false);
+  const [weatherMessage, setWeatherMessage] = useState("");
   const [note, setNote] = useState("");
 
   useEffect(() => {
@@ -55,6 +59,8 @@ export default function RecordScreen() {
       setHeadache("no");
       setHeadacheIntensity(0);
       setHeadacheFeatures([]);
+      setWeather(undefined);
+      setWeatherMessage("");
       setNote("");
       return;
     }
@@ -73,6 +79,8 @@ export default function RecordScreen() {
     setHeadache(source.headache ? "yes" : "no");
     setHeadacheIntensity(source.headacheIntensity ?? 0);
     setHeadacheFeatures(source.headacheFeatures ?? []);
+    setWeather(source.weather);
+    setWeatherMessage(source.weather ? "保存済みの天候データです。更新すると現在の値に置き換わります。" : "");
     setNote(source.note);
   }, [existing, targetDate]);
 
@@ -89,6 +97,22 @@ export default function RecordScreen() {
     setWakeTime(value);
     const next = sleepMinutesFromTimes(bedTime, value);
     if (next !== null) setSleepMinutes(String(next));
+  };
+
+  const acquireWeather = async () => {
+    setWeatherLoading(true);
+    setWeatherMessage("現在地を確認して、天候データを取得しています…");
+    try {
+      const snapshot = await fetchWeatherForCurrentLocation();
+      setWeather(snapshot);
+      setWeatherMessage("取得できました。この記録を保存すると天候データも端末内に保存されます。");
+    } catch (error) {
+      const message = error instanceof WeatherError ? error.message : "天候データを取得できませんでした。通信状態を確認して、もう一度お試しください。";
+      setWeatherMessage(message);
+      Alert.alert("天候を取得できませんでした", message);
+    } finally {
+      setWeatherLoading(false);
+    }
   };
 
   const save = () => {
@@ -129,6 +153,7 @@ export default function RecordScreen() {
       headache: headache === "yes",
       headacheIntensity: headache === "yes" ? headacheIntensity : 0,
       headacheFeatures: headache === "yes" ? headacheFeatures : [],
+      ...(weather ? { weather } : {}),
       note: note.trim(),
       isSample: false,
       createdAt: clashing?.createdAt ?? existing?.createdAt ?? now,
@@ -220,6 +245,35 @@ export default function RecordScreen() {
             ) : null}
           </Card>
 
+          <SectionLabel title="天候・気圧" />
+          <Card style={styles.formCard}>
+            <View style={styles.privacyRow}>
+              <MaterialIcons name="privacy-tip" size={20} color={colors.primary} />
+              <Text style={[styles.privacyText, { color: colors.muted }]}>位置情報はボタンを押した時だけ天候取得に使用し、Open-Meteoへ送信します。座標・住所・地名は保存せず、継続追跡もしません。</Text>
+            </View>
+            {weather ? (
+              <View style={[styles.weatherResult, { backgroundColor: `${colors.primary}09`, borderColor: `${colors.primary}28` }]}>
+                <View style={styles.weatherMetrics}>
+                  <WeatherValue label="気圧" value={`${weather.pressureHpa} hPa`} />
+                  <WeatherValue label="気温" value={`${weather.temperatureC} ℃`} />
+                  <WeatherValue label="天気" value={weather.condition} />
+                </View>
+                <Text style={[styles.weatherTime, { color: colors.muted }]}>取得日時：{formatAcquiredAt(weather.fetchedAt)}</Text>
+              </View>
+            ) : null}
+            <PrimaryButton
+              label={weatherLoading ? "取得中…" : weather ? "現在地から更新" : "現在地から天候・気圧を取得"}
+              icon={weatherLoading ? undefined : "my-location"}
+              onPress={() => { void acquireWeather(); }}
+              disabled={weatherLoading}
+            />
+            {weatherLoading ? <ActivityIndicator color={colors.primary} accessibilityLabel="天候データを取得中" /> : null}
+            {weatherMessage ? <Text accessibilityLiveRegion="polite" style={[styles.weatherMessage, { color: colors.muted }]}>{weatherMessage}</Text> : null}
+            {weather ? <PrimaryButton label="この記録から天候データを外す" secondary onPress={() => { setWeather(undefined); setWeatherMessage("天候データを外しました。保存すると反映されます。"); }} /> : null}
+            <Text style={[styles.weatherCaution, { color: colors.muted }]}>気圧は体調との関係を振り返るための記録です。頭痛などの診断・予測には使用しません。</Text>
+            <Text accessibilityRole="link" onPress={() => { void Linking.openURL(OPEN_METEO_ATTRIBUTION_URL); }} style={[styles.attribution, { color: colors.primary }]}>Weather data by Open-Meteo.com</Text>
+          </Card>
+
           <SectionLabel title="日中のようす" />
           <Card style={styles.formCard}>
             <View style={styles.formGroup}>
@@ -278,6 +332,11 @@ export default function RecordScreen() {
   );
 }
 
+function WeatherValue({ label, value }: { label: string; value: string }) {
+  const colors = useColors();
+  return <View style={styles.weatherValue}><Text style={[styles.weatherValueLabel, { color: colors.muted }]}>{label}</Text><Text style={[styles.weatherValueText, { color: colors.foreground }]}>{value}</Text></View>;
+}
+
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   content: { paddingHorizontal: 14, paddingTop: 10, paddingBottom: 24, gap: 11 },
@@ -297,4 +356,15 @@ const styles = StyleSheet.create({
   scoreLegend: { flexDirection: "row", justifyContent: "space-between", marginTop: 7 },
   legendText: { fontSize: 11, lineHeight: 15 },
   noteInput: { height: 110, paddingTop: 12 },
+  privacyRow: { flexDirection: "row", alignItems: "flex-start", gap: 9 },
+  privacyText: { flex: 1, fontSize: 12, lineHeight: 18 },
+  weatherResult: { gap: 8, padding: 12, borderWidth: 1, borderRadius: 14 },
+  weatherMetrics: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
+  weatherValue: { minWidth: 78, flex: 1, gap: 2 },
+  weatherValueLabel: { fontSize: 11, lineHeight: 15, fontWeight: "700" },
+  weatherValueText: { fontSize: 16, lineHeight: 22, fontWeight: "900" },
+  weatherTime: { fontSize: 11, lineHeight: 16 },
+  weatherMessage: { fontSize: 12, lineHeight: 18 },
+  weatherCaution: { fontSize: 11, lineHeight: 17 },
+  attribution: { minHeight: 32, paddingVertical: 6, alignSelf: "flex-start", fontSize: 12, lineHeight: 18, fontWeight: "800", textDecorationLine: "underline" },
 });
