@@ -87,6 +87,14 @@ describe("CSV import and export", () => {
       headache: true,
       headacheIntensity: 6,
       headacheFeatures: ["oneSide", "nausea", "lightOrSound"],
+      weather: {
+        pressureHpa: 1004.2,
+        temperatureC: 26.8,
+        condition: "曇り",
+        weatherCode: 3,
+        fetchedAt: "2026-09-09T05:30:00.000Z",
+        source: "Open-Meteo",
+      },
       note: "部活のあと、少し休憩",
       createdAt: "2026-09-09T00:00:00.000Z",
       updatedAt: "2026-09-09T00:00:00.000Z",
@@ -103,9 +111,18 @@ describe("CSV import and export", () => {
       headache: true,
       headacheIntensity: 6,
       headacheFeatures: ["oneSide", "nausea", "lightOrSound"],
+      weather: {
+        pressureHpa: 1004.2,
+        temperatureC: 26.8,
+        condition: "曇り",
+        weatherCode: 3,
+        fetchedAt: "2026-09-09T05:30:00.000Z",
+        source: "Open-Meteo",
+      },
       note: "部活のあと、少し休憩",
     });
     expect(csv).toContain("片側／吐き気／光や音がつらい");
+    expect(csv.split("\n")[0]).toContain("天候データ提供元");
   });
 
   it("imports a Phase 1 CSV with all original columns and safe defaults", () => {
@@ -143,11 +160,13 @@ describe("stored record compatibility", () => {
       caffeine: true, caffeineTime: "15:00", caffeineNote: "紅茶 1杯",
       headache: true, headacheIntensity: 4, headacheFeatures: ["aroundEyes", "other"], note: "",
       createdAt: "2026-09-09T00:00:00.000Z", updatedAt: "2026-09-09T00:00:00.000Z",
+      weather: { pressureHpa: 998.4, temperatureC: 24.1, condition: "雨", weatherCode: 61, fetchedAt: "2026-09-09T03:00:00.000Z", source: "Open-Meteo" },
     }));
 
     expect(normalizeSleepRecord(stored)).toMatchObject({
       napMinutes: 30, caffeineTime: "15:00", caffeineNote: "紅茶 1杯",
       headacheIntensity: 4, headacheFeatures: ["aroundEyes", "other"],
+      weather: { pressureHpa: 998.4, temperatureC: 24.1, condition: "雨", weatherCode: 61, source: "Open-Meteo" },
     });
   });
 });

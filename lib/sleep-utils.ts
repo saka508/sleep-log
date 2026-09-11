@@ -9,6 +9,15 @@ export const HEADACHE_FEATURE_OPTIONS = [
 
 export type HeadacheFeature = (typeof HEADACHE_FEATURE_OPTIONS)[number]["value"];
 
+export type WeatherSnapshot = {
+  pressureHpa: number;
+  temperatureC: number;
+  condition: string;
+  weatherCode: number;
+  fetchedAt: string;
+  source: "Open-Meteo";
+};
+
 export type SleepRecord = {
   id: string;
   date: string;
@@ -25,6 +34,7 @@ export type SleepRecord = {
   headache: boolean;
   headacheIntensity?: number;
   headacheFeatures?: HeadacheFeature[];
+  weather?: WeatherSnapshot;
   note: string;
   isSample?: boolean;
   createdAt: string;
@@ -64,6 +74,7 @@ export function normalizeSleepRecord(value: Partial<SleepRecord>): SleepRecord |
   const headacheFeatures = Array.isArray(value.headacheFeatures)
     ? [...new Set(value.headacheFeatures.filter((feature): feature is HeadacheFeature => HEADACHE_FEATURE_VALUES.has(feature as HeadacheFeature)))]
     : [];
+  const weather = normalizeWeatherSnapshot(value.weather);
   return {
     id: value.date,
     date: value.date,
@@ -80,11 +91,38 @@ export function normalizeSleepRecord(value: Partial<SleepRecord>): SleepRecord |
     headache,
     headacheIntensity: headache ? safeScore(value.headacheIntensity) : 0,
     headacheFeatures: headache ? headacheFeatures : [],
+    ...(weather ? { weather } : {}),
     note: typeof value.note === "string" ? value.note : "",
     isSample: Boolean(value.isSample),
     createdAt: value.createdAt ?? new Date().toISOString(),
     updatedAt: value.updatedAt ?? new Date().toISOString(),
   };
+}
+
+function normalizeWeatherSnapshot(value: unknown): WeatherSnapshot | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const candidate = value as Partial<WeatherSnapshot>;
+  const pressureHpa = Number(candidate.pressureHpa);
+  const temperatureC = Number(candidate.temperatureC);
+  const weatherCode = Number(candidate.weatherCode);
+  if (!Number.isFinite(pressureHpa) || !Number.isFinite(temperatureC) || !Number.isFinite(weatherCode)) return undefined;
+  if (typeof candidate.condition !== "string" || !candidate.condition.trim()) return undefined;
+  if (typeof candidate.fetchedAt !== "string" || !Number.isFinite(Date.parse(candidate.fetchedAt))) return undefined;
+  if (candidate.source !== "Open-Meteo") return undefined;
+  return {
+    pressureHpa: Math.round(pressureHpa * 10) / 10,
+    temperatureC: Math.round(temperatureC * 10) / 10,
+    condition: candidate.condition.trim(),
+    weatherCode: Math.round(weatherCode),
+    fetchedAt: candidate.fetchedAt,
+    source: "Open-Meteo",
+  };
+}
+
+export function formatAcquiredAt(value: string) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "—";
+  return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 }
 
 export const DAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"];

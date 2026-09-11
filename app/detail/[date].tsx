@@ -1,12 +1,13 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { router, useLocalSearchParams } from "expo-router";
-import { Alert, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Linking, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { Card, EmptyState, IconButton, PageHeader, PrimaryButton, SectionLabel, SmallStatus } from "@/components/sleep-ui";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { useSleepData } from "@/lib/sleep-store";
-import { formatDate, formatDuration, getHeadacheFeatureLabel } from "@/lib/sleep-utils";
+import { formatAcquiredAt, formatDate, formatDuration, getHeadacheFeatureLabel } from "@/lib/sleep-utils";
+import { OPEN_METEO_ATTRIBUTION_URL } from "@/lib/weather-service";
 
 export default function RecordDetailScreen() {
   const colors = useColors();
@@ -57,6 +58,18 @@ export default function RecordDetailScreen() {
           <DetailRow icon="timer" label="寝つくまで" value={`${record.latencyMinutes} 分`} />
           <DetailRow icon="hotel" label="昼寝" value={record.napMinutes > 0 ? `${record.napMinutes} 分` : "なし"} last />
         </Card>
+
+        {record.weather ? <>
+          <SectionLabel title="天候・気圧" />
+          <Card style={styles.listCard}>
+            <DetailRow icon="compress" label="気圧" value={`${record.weather.pressureHpa} hPa`} />
+            <DetailRow icon="thermostat" label="気温" value={`${record.weather.temperatureC} ℃`} />
+            <DetailRow icon="cloud" label="天気" value={record.weather.condition} />
+            <DetailRow icon="schedule" label="取得日時" value={formatAcquiredAt(record.weather.fetchedAt)} last />
+          </Card>
+          <Text style={[styles.weatherCaution, { color: colors.muted }]}>気圧は体調との関係を振り返るための記録であり、頭痛などの診断・予測を行うものではありません。</Text>
+          <Text accessibilityRole="link" onPress={() => { void Linking.openURL(OPEN_METEO_ATTRIBUTION_URL); }} style={[styles.attribution, { color: colors.primary }]}>Weather data by Open-Meteo.com</Text>
+        </> : null}
 
         <SectionLabel title="日中のようす" />
         <View style={styles.scores}>
@@ -116,4 +129,6 @@ const styles = StyleSheet.create({
   note: { fontSize: 15, lineHeight: 24 },
   disclaimer: { flexDirection: "row", alignItems: "flex-start", gap: 8, padding: 13, borderRadius: 14 },
   disclaimerText: { flex: 1, fontSize: 12, lineHeight: 18 },
+  weatherCaution: { fontSize: 12, lineHeight: 18 },
+  attribution: { minHeight: 32, paddingVertical: 6, alignSelf: "flex-start", fontSize: 12, lineHeight: 18, fontWeight: "800", textDecorationLine: "underline" },
 });

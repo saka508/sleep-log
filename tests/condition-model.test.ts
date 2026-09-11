@@ -74,4 +74,21 @@ describe("daily condition compatibility model", () => {
   it("keeps empty notes optional in the new model", () => {
     expect(dailyConditionFromSleepRecord(sleepRecord({ note: "" })).note).toBeUndefined();
   });
+
+  it("maps an optional weather snapshot without coordinates", () => {
+    const condition = dailyConditionFromSleepRecord(sleepRecord({
+      weather: { pressureHpa: 1001.5, temperatureC: 25.2, condition: "晴れ", weatherCode: 1, fetchedAt: "2026-09-09T04:00:00.000Z", source: "Open-Meteo" },
+    }));
+
+    expect(condition.environment).toEqual({
+      source: "api",
+      pressureHpa: 1001.5,
+      weather: "晴れ",
+      temperatureCelsius: 25.2,
+      weatherCode: 1,
+      fetchedAt: "2026-09-09T04:00:00.000Z",
+      provider: "Open-Meteo",
+    });
+    expect(condition.environment).not.toHaveProperty("latitude");
+  });
 });
