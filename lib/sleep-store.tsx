@@ -8,6 +8,10 @@ import {
   type SleepRecord,
   sortRecords,
 } from "@/lib/sleep-utils";
+import {
+  dailyConditionsFromSleepRecords,
+  type DailyConditionRecord,
+} from "@/lib/condition-model";
 
 const STORAGE_KEY = "sleep-log.local-data.v1";
 
@@ -18,6 +22,7 @@ type SleepDataState = {
 
 type SleepDataContextValue = SleepDataState & {
   isReady: boolean;
+  dailyConditions: DailyConditionRecord[];
   saveRecord: (record: SleepRecord) => void;
   removeRecord: (date: string) => void;
   importRecords: (records: SleepRecord[]) => number;
@@ -145,10 +150,16 @@ export function SleepDataProvider({ children }: { children: React.ReactNode }) {
     setState((current) => ({ ...current, records: [] }));
   }, []);
 
+  const dailyConditions = useMemo(
+    () => dailyConditionsFromSleepRecords(state.records),
+    [state.records],
+  );
+
   const value = useMemo(
     () => ({
       ...state,
       isReady,
+      dailyConditions,
       saveRecord,
       removeRecord,
       importRecords,
@@ -157,7 +168,7 @@ export function SleepDataProvider({ children }: { children: React.ReactNode }) {
       addSampleRecords,
       clearAllRecords,
     }),
-    [state, isReady, saveRecord, removeRecord, importRecords, updateSettings, removeSampleRecords, addSampleRecords, clearAllRecords],
+    [state, isReady, dailyConditions, saveRecord, removeRecord, importRecords, updateSettings, removeSampleRecords, addSampleRecords, clearAllRecords],
   );
 
   return <SleepDataContext.Provider value={value}>{children}</SleepDataContext.Provider>;
