@@ -102,6 +102,9 @@ export function useAuth(options?: UseAuthOptions) {
       if (Platform.OS === "web") {
         // Web: fetch user from API directly (user will login manually if needed)
         console.log("[useAuth] Web: fetching user from API...");
+        // This unused template hook intentionally starts its initial request
+        // from the effect; fetchUser owns the loading and error state updates.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         fetchUser();
       } else {
         // Native: check for cached user info first for faster initial load

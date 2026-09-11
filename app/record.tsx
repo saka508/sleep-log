@@ -32,6 +32,9 @@ export default function RecordScreen() {
   useEffect(() => {
     const source = existing;
     if (!source) {
+      // The route date selects a different form document, so all local fields
+      // intentionally reset together when that route input changes.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setDate(targetDate);
       setBedTime("23:30");
       setWakeTime("07:00");
