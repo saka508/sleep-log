@@ -5,6 +5,7 @@ import { ActivityIndicator, Alert, KeyboardAvoidingView, Linking, Platform, Scro
 
 import { AppTextInput, Card, ChoicePills, FieldLabel, MultiChoicePills, PageHeader, PrimaryButton, ScorePicker, SectionLabel } from "@/components/sleep-ui";
 import { ScreenContainer } from "@/components/screen-container";
+import { LocalDatePicker, LocalTimePicker } from "@/components/local-date-time-picker";
 import { useColors } from "@/hooks/use-colors";
 import { useSleepData } from "@/lib/sleep-store";
 import { formatAcquiredAt, formatDate, HEADACHE_FEATURE_OPTIONS, isDateKey, isTime, sleepMinutesFromTimes, todayKey, type HeadacheFeature, type SleepRecord, type WeatherSnapshot } from "@/lib/sleep-utils";
@@ -218,18 +219,12 @@ export default function RecordScreen() {
           <SectionLabel title="睡眠" />
           <Card style={styles.formCard}>
             <View style={styles.formGroup}>
-              <FieldLabel label="日付" hint="睡眠をとった日" />
-              <AppTextInput value={date} onChangeText={setDate} placeholder="2026-09-09" autoCapitalize="none" />
+              <FieldLabel label="日付" hint="睡眠をとった日・過去の日付も選べます" />
+              <LocalDatePicker value={date} onChange={setDate} accessibilityLabel="睡眠記録の日付を選択" />
             </View>
             <View style={styles.twoColumns}>
-              <View style={styles.flexField}>
-                <FieldLabel label="就寝時刻" />
-                <AppTextInput value={bedTime} onChangeText={updateBed} placeholder="23:30" keyboardType="numbers-and-punctuation" />
-              </View>
-              <View style={styles.flexField}>
-                <FieldLabel label="起床時刻" />
-                <AppTextInput value={wakeTime} onChangeText={updateWake} placeholder="07:00" keyboardType="numbers-and-punctuation" />
-              </View>
+              <LocalTimePicker label="就寝時刻" value={bedTime} onChange={updateBed} accessibilityLabel="就寝時刻を選択" />
+              <LocalTimePicker label="起床時刻" value={wakeTime} onChange={updateWake} accessibilityLabel="起床時刻を選択" />
             </View>
             <View style={styles.formGroup}>
               <FieldLabel label="実睡眠時間" hint={calculatedMinutes !== null ? `時刻から ${Math.floor(calculatedMinutes / 60)}時間${calculatedMinutes % 60}分` : "手動で入力"} />
@@ -383,7 +378,6 @@ const styles = StyleSheet.create({
   formGroup: { gap: 0 },
   conditionalFields: { gap: 12, padding: 12, borderWidth: 1, borderRadius: 14 },
   twoColumns: { flexDirection: "row", gap: 12 },
-  flexField: { flex: 1 },
   withUnit: { flexDirection: "row", alignItems: "center", gap: 7 },
   numberInput: { flex: 1 },
   unit: { fontSize: 14, lineHeight: 20, fontWeight: "700" },
