@@ -75,6 +75,7 @@ export type SubjectiveCondition = {
  * incomplete daily entries and future automatically collected data are valid.
  */
 export type DailyConditionRecord = {
+  schemaVersion: 1;
   date: string;
   sleep?: SleepCondition;
   exercise?: ExerciseCondition;
@@ -92,6 +93,7 @@ export type DailyConditionRecord = {
  */
 export function dailyConditionFromSleepRecord(record: SleepRecord): DailyConditionRecord {
   return {
+    schemaVersion: 1,
     date: record.date,
     sleep: {
       source: "manual",
