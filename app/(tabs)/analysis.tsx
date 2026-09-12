@@ -5,7 +5,8 @@ import { ConditionTrendChart } from "@/components/condition-trend-chart";
 import { AppTextInput, Card, ChoicePills, MetricCard, PageHeader, PrimaryButton, SectionLabel, SmallStatus, ToggleRow } from "@/components/sleep-ui";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
-import { analyzeRelation, buildSleepRecommendation, buildTrend, formatAnalysisMetric, getAnalysisMetricLabel, MIN_RECOMMENDATION_SLEEP_MINUTES, summarizeTrend, type AnalysisGranularity, type AnalysisMetric, type RelationKey } from "@/lib/condition-analysis";
+import { analyzeRelation, assessAnalysisQuality, buildSleepRecommendation, buildTrend, formatAnalysisMetric, getAnalysisMetricLabel, MIN_RECOMMENDATION_SLEEP_MINUTES, summarizeTrend, type AnalysisGranularity, type AnalysisMetric, type AnalysisQuality, type RelationKey } from "@/lib/condition-analysis";
+import { Collapsible } from "@/components/ui/collapsible";
 import { useSleepData } from "@/lib/sleep-store";
 import { formatDuration, isTime } from "@/lib/sleep-utils";
 
@@ -23,6 +24,7 @@ export default function AnalysisScreen() {
   const trend = useMemo(() => buildTrend(records, metric, granularity), [records, metric, granularity]);
   const summary = useMemo(() => summarizeTrend(trend), [trend]);
   const relations = useMemo(() => RELATIONS.map((key) => analyzeRelation(records, key)), [records]);
+  const quality = useMemo(() => assessAnalysisQuality(records, metric, granularity, relations), [records, metric, granularity, relations]);
   const recommendation = useMemo(() => buildSleepRecommendation(records), [records]);
   const [bedTimeOverride, setBedTime] = useState<string | null>(null);
   const [wakeTimeOverride, setWakeTime] = useState<string | null>(null);
@@ -61,6 +63,8 @@ export default function AnalysisScreen() {
           </View>
           <Text style={[styles.note, { color: colors.muted }]}>欠損している値は平均・中央値・線で扱わず、「データなし」として残します。{granularity === "day" ? "横軸は記録した実際の日付です。" : "週・月はその期間にある値だけを平均しています。"}</Text>
         </Card>
+
+        <DataQualityCard quality={quality} />
 
         <SectionLabel title="項目どうしの見比べ" />
         <View style={styles.relations}>{relations.map((relation) => <RelationCard key={relation.key} relation={relation} />)}</View>
@@ -105,6 +109,36 @@ function RecommendationValue({ label, value }: { label: string; value: string })
   return <View style={[styles.recommendationValue, { backgroundColor: `${colors.primary}12` }]}><Text style={[styles.recommendationLabel, { color: colors.muted }]}>{label}</Text><Text style={[styles.recommendationNumber, { color: colors.primary }]}>{value}</Text></View>;
 }
 
+function DataQualityCard({ quality }: { quality: AnalysisQuality }) {
+  const colors = useColors();
+  const tone = quality.status === "sufficient" ? colors.success : quality.status === "partial" || quality.status === "reference" ? colors.warning : colors.muted;
+  return (
+    <Card style={styles.qualityCard}>
+      <Collapsible title={`データ品質（${quality.statusLabel}）`}>
+        <View style={styles.qualityContent}>
+          <View style={styles.qualityHeader}><Text style={[styles.qualityPeriod, { color: colors.foreground }]}>{quality.periodLabel}</Text><SmallStatus label={quality.statusLabel} tone={quality.status === "sufficient" ? "success" : quality.status === "partial" || quality.status === "reference" ? "warning" : "muted"} /></View>
+          <Text style={[styles.qualityMessage, { color: tone }]}>{quality.message}</Text>
+          <View style={styles.qualityGrid}>
+            <QualityValue label="全記録" value={`${quality.totalRecords} 件`} />
+            <QualityValue label="個人分析" value={`${quality.personalRecords} 件`} />
+            <QualityValue label={`${quality.metricLabel}有効`} value={`${quality.validMetricRecords} 件`} />
+            <QualityValue label="欠損除外" value={`${quality.missingMetricRecords} 件`} />
+          </View>
+          {quality.excludedSampleRecords ? <Text style={[styles.qualityNote, { color: colors.muted }]}>サンプル記録 {quality.excludedSampleRecords} 件を個人分析から除外しました。</Text> : null}
+          <Text style={[styles.qualityNote, { color: colors.muted }]}>表示グループ: {quality.validPeriodGroups} / {quality.periodGroups}。相関は両方の値がある日だけを使います。</Text>
+          <View style={styles.relationPairs}>{quality.relationPairs.map((relation) => <Text key={relation.key} style={[styles.relationPair, { color: colors.muted }]}>{relation.label}: {relation.pairedCount} / {quality.minimumRelationPairs} 組</Text>)}</View>
+          <Text style={[styles.qualityNote, { color: colors.muted }]}>これは本人の記録を振り返るための参考情報であり、診断ではありません。</Text>
+        </View>
+      </Collapsible>
+    </Card>
+  );
+}
+
+function QualityValue({ label, value }: { label: string; value: string }) {
+  const colors = useColors();
+  return <View style={[styles.qualityValue, { backgroundColor: `${colors.primary}12` }]}><Text style={[styles.qualityValueLabel, { color: colors.muted }]}>{label}</Text><Text style={[styles.qualityValueNumber, { color: colors.foreground }]}>{value}</Text></View>;
+}
+
 const styles = StyleSheet.create({
-  content: { paddingHorizontal: 14, paddingTop: 10, paddingBottom: 24, gap: 11 }, chartCard: { gap: 13, paddingHorizontal: 14, paddingVertical: 16 }, chartTitle: { fontSize: 16, lineHeight: 22, fontWeight: "800" }, statsGrid: { flexDirection: "row", gap: 8 }, statBox: { flex: 1, minWidth: 0 }, note: { fontSize: 12, lineHeight: 18 }, relations: { gap: 8 }, relationCard: { gap: 3, paddingVertical: 13 }, relationTitle: { fontSize: 15, lineHeight: 21, fontWeight: "800" }, relationMeta: { fontSize: 11, lineHeight: 16 }, relationValue: { fontSize: 13, lineHeight: 19, fontWeight: "700", marginTop: 2 }, recommendationCard: { gap: 12 }, recommendationTitle: { fontSize: 16, lineHeight: 22, fontWeight: "800" }, recommendationReason: { fontSize: 12, lineHeight: 18 }, recommendationGrid: { flexDirection: "row", gap: 8 }, recommendationValue: { flex: 1, borderRadius: 12, padding: 10, gap: 2 }, recommendationLabel: { fontSize: 11, lineHeight: 15, fontWeight: "700" }, recommendationNumber: { fontSize: 15, lineHeight: 21, fontWeight: "900" }, editTitle: { fontSize: 14, lineHeight: 20, fontWeight: "800", marginTop: 3 }, editRow: { flexDirection: "row", gap: 7 }, editField: { flex: 1, minWidth: 0, gap: 4 }, editLabel: { fontSize: 11, lineHeight: 15, fontWeight: "700" }, disclaimer: { borderRadius: 14, padding: 13 }, disclaimerText: { fontSize: 12, lineHeight: 18 },
+  content: { paddingHorizontal: 14, paddingTop: 10, paddingBottom: 24, gap: 11 }, chartCard: { gap: 13, paddingHorizontal: 14, paddingVertical: 16 }, chartTitle: { fontSize: 16, lineHeight: 22, fontWeight: "800" }, statsGrid: { flexDirection: "row", gap: 8 }, statBox: { flex: 1, minWidth: 0 }, note: { fontSize: 12, lineHeight: 18 }, qualityCard: { paddingVertical: 14 }, qualityContent: { gap: 10 }, qualityHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 8 }, qualityPeriod: { flex: 1, fontSize: 14, lineHeight: 20, fontWeight: "800" }, qualityMessage: { fontSize: 13, lineHeight: 19, fontWeight: "700" }, qualityGrid: { flexDirection: "row", flexWrap: "wrap", gap: 7 }, qualityValue: { width: "48%", borderRadius: 10, padding: 9, gap: 1 }, qualityValueLabel: { fontSize: 10, lineHeight: 14, fontWeight: "700" }, qualityValueNumber: { fontSize: 14, lineHeight: 20, fontWeight: "900" }, qualityNote: { fontSize: 11, lineHeight: 16 }, relationPairs: { gap: 3 }, relationPair: { fontSize: 11, lineHeight: 16 }, relations: { gap: 8 }, relationCard: { gap: 3, paddingVertical: 13 }, relationTitle: { fontSize: 15, lineHeight: 21, fontWeight: "800" }, relationMeta: { fontSize: 11, lineHeight: 16 }, relationValue: { fontSize: 13, lineHeight: 19, fontWeight: "700", marginTop: 2 }, recommendationCard: { gap: 12 }, recommendationTitle: { fontSize: 16, lineHeight: 22, fontWeight: "800" }, recommendationReason: { fontSize: 12, lineHeight: 18 }, recommendationGrid: { flexDirection: "row", gap: 8 }, recommendationValue: { flex: 1, borderRadius: 12, padding: 10, gap: 2 }, recommendationLabel: { fontSize: 11, lineHeight: 15, fontWeight: "700" }, recommendationNumber: { fontSize: 15, lineHeight: 21, fontWeight: "900" }, editTitle: { fontSize: 14, lineHeight: 20, fontWeight: "800", marginTop: 3 }, editRow: { flexDirection: "row", gap: 7 }, editField: { flex: 1, minWidth: 0, gap: 4 }, editLabel: { fontSize: 11, lineHeight: 15, fontWeight: "700" }, disclaimer: { borderRadius: 14, padding: 13 }, disclaimerText: { fontSize: 12, lineHeight: 18 },
 });
