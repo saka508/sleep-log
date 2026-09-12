@@ -9,7 +9,7 @@ import { analyzeRelation, buildSleepRecommendation, buildTrend, formatAnalysisMe
 import { useSleepData } from "@/lib/sleep-store";
 import { formatDuration, isTime } from "@/lib/sleep-utils";
 
-const METRIC_OPTIONS: Array<{ value: AnalysisMetric; label: string }> = [
+const METRIC_OPTIONS: { value: AnalysisMetric; label: string }[] = [
   { value: "sleepMinutes", label: "睡眠" }, { value: "bedTime", label: "就寝" }, { value: "wakeTime", label: "起床" }, { value: "napMinutes", label: "昼寝" },
   { value: "sleepiness", label: "眠気" }, { value: "clarity", label: "冴え" }, { value: "headacheIntensity", label: "頭痛" }, { value: "pressureHpa", label: "気圧" },
 ];

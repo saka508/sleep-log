@@ -2,7 +2,7 @@ import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { useState } from "react";
 import { Alert, ScrollView, StyleSheet, Text, View } from "react-native";
 
-import { AppTextInput, Card, ChoicePills, EmptyState, PageHeader, PrimaryButton, SectionLabel, ToggleRow } from "@/components/sleep-ui";
+import { AppTextInput, Card, ChoicePills, PageHeader, PrimaryButton, SectionLabel, ToggleRow } from "@/components/sleep-ui";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { configureDailyReminder } from "@/lib/notification-service";
