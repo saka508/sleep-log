@@ -32,6 +32,31 @@ describe("condition analysis trends", () => {
     expect(trend).toHaveLength(1);
     expect(trend.map((point) => point.value)).toEqual([15]);
   });
+
+  it("includes recorded fatigue zero but leaves absent fatigue as missing", () => {
+    const records = [
+      record("2026-09-01", { fatigue: 0, muscleFatigue: 0 }),
+      record("2026-09-02", { fatigue: 6, muscleFatigue: 8 }),
+      record("2026-09-03"),
+      record("2026-09-04", { isSample: true, fatigue: 10, muscleFatigue: 10 }),
+    ];
+
+    expect(buildTrend(records, "fatigue", "day").map((point) => point.value)).toEqual([0, 6, null]);
+    expect(buildTrend(records, "muscleFatigue", "week")).toEqual([expect.objectContaining({ value: 4 })]);
+    expect(summarizeTrend(buildTrend(records, "fatigue", "day"))).toMatchObject({ average: 3, median: 3, dataDays: 2 });
+  });
+
+  it("reaggregates muscle fatigue for day, week, and month without changing recorded zero", () => {
+    const records = [
+      record("2026-09-07", { muscleFatigue: 0 }),
+      record("2026-09-08", { muscleFatigue: 4 }),
+      record("2026-10-01", { muscleFatigue: 8 }),
+    ];
+
+    expect(buildTrend(records, "muscleFatigue", "day").map((point) => point.value)).toEqual([0, 4, 8]);
+    expect(buildTrend(records, "muscleFatigue", "week").map((point) => point.value)).toEqual([2, 8]);
+    expect(buildTrend(records, "muscleFatigue", "month").map((point) => point.value)).toEqual([2, 8]);
+  });
 });
 
 describe("condition analysis relations", () => {
@@ -94,6 +119,21 @@ describe("analysis data quality", () => {
     const records = [record("2026-09-01"), record("2026-09-02"), record("2026-09-03", { weather: { pressureHpa: 1001, temperatureC: 22, condition: "曇り", weatherCode: 3, fetchedAt: "2026-09-03T00:00:00.000Z", source: "Open-Meteo" } })];
     expect(assessAnalysisQuality(records, "pressureHpa", "day", relationsFor(records))).toMatchObject({
       personalRecords: 3, validMetricRecords: 1, missingMetricRecords: 2, status: "reference",
+    });
+  });
+
+  it("uses fatigue and muscle fatigue values in quality metadata without including samples", () => {
+    const records = [
+      record("2026-09-01", { fatigue: 0, muscleFatigue: 0 }),
+      record("2026-09-02", { fatigue: 4 }),
+      record("2026-09-03", { isSample: true, fatigue: 9, muscleFatigue: 9 }),
+    ];
+
+    expect(assessAnalysisQuality(records, "fatigue", "day", relationsFor(records))).toMatchObject({
+      totalRecords: 3, personalRecords: 2, excludedSampleRecords: 1, validMetricRecords: 2, missingMetricRecords: 0, status: "reference",
+    });
+    expect(assessAnalysisQuality(records, "muscleFatigue", "day", relationsFor(records))).toMatchObject({
+      totalRecords: 3, personalRecords: 2, excludedSampleRecords: 1, validMetricRecords: 1, missingMetricRecords: 1, status: "reference",
     });
   });
 
