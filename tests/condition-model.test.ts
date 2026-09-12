@@ -32,6 +32,7 @@ describe("daily condition compatibility model", () => {
     const snapshot = structuredClone(legacy);
 
     expect(dailyConditionFromSleepRecord(legacy)).toEqual({
+      schemaVersion: 1,
       date: "2026-09-09",
       sleep: {
         source: "manual",
