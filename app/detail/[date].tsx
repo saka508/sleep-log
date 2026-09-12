@@ -76,6 +76,10 @@ export default function RecordDetailScreen() {
           <ScoreCard label="眠気" value={record.sleepiness} accent="#8B5CF6" low="眠くない" high="とても眠い" />
           <ScoreCard label="頭の冴え" value={record.clarity} accent="#189B87" low="ぼんやり" high="冴えている" />
         </View>
+        {record.fatigue !== undefined || record.muscleFatigue !== undefined ? <View style={styles.scores}>
+          {record.fatigue !== undefined ? <ScoreCard label="疲労" value={record.fatigue} accent="#D97706" low="疲労なし" high="とても疲れている" /> : <View style={styles.scoreCard} />}
+          {record.muscleFatigue !== undefined ? <ScoreCard label="筋肉疲労" value={record.muscleFatigue} accent="#DC2626" low="なし" high="とても強い" /> : <View style={styles.scoreCard} />}
+        </View> : null}
         <Card style={styles.listCard}>
           <DetailRow icon="local-cafe" label="カフェイン" value={record.caffeine ? "あり" : "なし"} valueColor={record.caffeine ? colors.warning : colors.success} />
           {record.caffeine && record.caffeineTime ? <DetailRow icon="schedule" label="摂取時刻" value={record.caffeineTime} /> : null}
@@ -84,6 +88,7 @@ export default function RecordDetailScreen() {
           {record.headache ? <DetailRow icon="speed" label="頭痛の強さ" value={`${record.headacheIntensity ?? 0} / 10`} last={!record.headacheFeatures?.length} /> : null}
           {record.headache && record.headacheFeatures?.length ? <DetailRow icon="fact-check" label="頭痛の特徴" value={record.headacheFeatures.map(getHeadacheFeatureLabel).join("、")} last /> : null}
         </Card>
+        {(record.fatigue !== undefined || record.muscleFatigue !== undefined) ? <Text style={[styles.subjectiveCaution, { color: colors.muted }]}>疲労・筋肉疲労は生活の振り返り用の記録であり、医学的な診断ではありません。</Text> : null}
 
         {record.note ? <><SectionLabel title="その日の体調メモ" /><Card><Text style={[styles.note, { color: colors.foreground }]}>{record.note}</Text></Card></> : null}
         <View style={[styles.disclaimer, { backgroundColor: `${colors.muted}12` }]}><MaterialIcons name="info-outline" size={17} color={colors.muted} /><Text style={[styles.disclaimerText, { color: colors.muted }]}>この記録は生活の振り返り用です。症状が気になる場合は、保護者や医療機関に相談してください。</Text></View>
@@ -130,5 +135,6 @@ const styles = StyleSheet.create({
   disclaimer: { flexDirection: "row", alignItems: "flex-start", gap: 8, padding: 13, borderRadius: 14 },
   disclaimerText: { flex: 1, fontSize: 12, lineHeight: 18 },
   weatherCaution: { fontSize: 12, lineHeight: 18 },
+  subjectiveCaution: { fontSize: 12, lineHeight: 18 },
   attribution: { minHeight: 32, paddingVertical: 6, alignSelf: "flex-start", fontSize: 12, lineHeight: 18, fontWeight: "800", textDecorationLine: "underline" },
 });
