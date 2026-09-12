@@ -44,6 +44,10 @@ export type SleepRecord = {
 export type AppSettings = {
   reminderEnabled: boolean;
   reminderTime: string;
+  recommendationEnabled: boolean;
+  recommendationBedTime?: string;
+  recommendationWakeTime?: string;
+  recommendationSleepMinutes?: number;
 };
 
 export type TrendMetric =
@@ -57,6 +61,7 @@ export type TrendMetric =
 export const DEFAULT_SETTINGS: AppSettings = {
   reminderEnabled: false,
   reminderTime: "21:30",
+  recommendationEnabled: true,
 };
 
 const HEADACHE_FEATURE_VALUES = new Set<HeadacheFeature>(HEADACHE_FEATURE_OPTIONS.map((option) => option.value));
