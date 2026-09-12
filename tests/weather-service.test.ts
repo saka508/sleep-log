@@ -14,6 +14,7 @@ describe("Open-Meteo weather service", () => {
     expect(url.searchParams.get("current")).toBe("temperature_2m,surface_pressure,weather_code");
     expect(url.searchParams.get("latitude")).toBe("35.6812");
     expect(url.searchParams.get("longitude")).toBe("139.7671");
+    expect(url.searchParams.get("timeformat")).toBe("unixtime");
   });
 
   it("converts WMO codes to readable Japanese", () => {
@@ -25,7 +26,7 @@ describe("Open-Meteo weather service", () => {
 
   it("normalizes the API response without retaining coordinates", async () => {
     const fetcher = vi.fn(async () => new Response(JSON.stringify({
-      current: { temperature_2m: 27.24, surface_pressure: 1002.86, weather_code: 2 },
+      current: { time: 1789257600, temperature_2m: 27.24, surface_pressure: 1002.86, weather_code: 2 },
     }), { status: 200 }));
 
     const weather = await fetchCurrentWeather({ latitude: 35, longitude: 139 }, fetcher);
@@ -34,6 +35,7 @@ describe("Open-Meteo weather service", () => {
       temperatureC: 27.2,
       condition: "一部曇り",
       weatherCode: 2,
+      observedAt: "2026-09-13T00:00:00.000Z",
       source: "Open-Meteo",
     });
     expect(weather).not.toHaveProperty("latitude");
@@ -59,7 +61,7 @@ describe("Open-Meteo weather service", () => {
   });
 
   it("rejects incomplete API data instead of saving an uncertain value", async () => {
-    const fetcher = vi.fn(async () => new Response(JSON.stringify({ current: { temperature_2m: 22 } }), { status: 200 }));
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({ current: { time: 1789257600, temperature_2m: 22 } }), { status: 200 }));
     await expect(fetchCurrentWeather({ latitude: 35, longitude: 139 }, fetcher)).rejects.toMatchObject({ code: "invalid-response" });
   });
 });

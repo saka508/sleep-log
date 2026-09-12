@@ -9,6 +9,9 @@ import { configureDailyReminder } from "@/lib/notification-service";
 import { useSleepData } from "@/lib/sleep-store";
 import { useThemeContext, type ThemePreference } from "@/lib/theme-provider";
 import { exportRecords, pickAndReadCsv, recordsFromCsv } from "@/lib/csv-service";
+import { exportHeadacheEvents, pickAndReadHeadacheBackup } from "@/lib/headache-backup-service";
+import { headacheEventsFromBackupJson } from "@/lib/headache-events";
+import { useHeadacheEvents } from "@/lib/headache-store";
 
 
 
@@ -19,6 +22,7 @@ function isReminderTime(value: string) {
 export default function SettingsScreen() {
   const colors = useColors();
   const { records, settings, updateSettings, importRecords, removeSampleRecords, addSampleRecords, clearAllRecords, isReady } = useSleepData();
+  const { events: headacheEvents, importEvents: importHeadacheEvents, isReady: headacheEventsReady } = useHeadacheEvents();
   const { colorScheme, preference, setPreference } = useThemeContext();
   const [reminderTime, setReminderTime] = useState(settings.reminderTime);
   const [busy, setBusy] = useState(false);
@@ -93,16 +97,48 @@ export default function SettingsScreen() {
     }
   };
 
+  const doHeadacheExport = async () => {
+    try {
+      setBusy(true);
+      await exportHeadacheEvents(headacheEvents);
+    } catch {
+      Alert.alert("バックアップできませんでした", "もう一度試してください。");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const doHeadacheImport = async () => {
+    try {
+      setBusy(true);
+      const text = await pickAndReadHeadacheBackup();
+      if (!text) return;
+      const parsed = headacheEventsFromBackupJson(text);
+      if (!parsed.length) {
+        Alert.alert("読み込めるイベントがありません", "Sleep Logが書き出した頭痛イベントJSONを選んでください。");
+        return;
+      }
+      Alert.alert("頭痛イベントを復元しますか？", `${parsed.length}件をIDごとに追加または更新します。既存の日次頭痛は変更しません。`, [
+        { text: "キャンセル", style: "cancel" },
+        { text: "復元する", onPress: () => { const count = importHeadacheEvents(parsed); Alert.alert("復元しました", `${count}件の頭痛イベントを追加・更新しました。`); } },
+      ]);
+    } catch {
+      Alert.alert("復元できませんでした", "頭痛イベントJSONの形式を確認してください。");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const confirmRemoveSamples = () => Alert.alert("サンプルデータを削除しますか？", "自分で入力した記録は残ります。", [
     { text: "キャンセル", style: "cancel" },
     { text: "削除", style: "destructive", onPress: removeSampleRecords },
   ]);
-  const confirmClear = () => Alert.alert("すべての記録を削除しますか？", "この操作は元に戻せません。CSVに書き出してから削除することをおすすめします。", [
+  const confirmClear = () => Alert.alert("睡眠・日次記録をすべて削除しますか？", "頭痛イベントは削除されません。この操作は元に戻せないため、先にCSVへ書き出すことをおすすめします。", [
     { text: "キャンセル", style: "cancel" },
-    { text: "すべて削除", style: "destructive", onPress: clearAllRecords },
+    { text: "睡眠・日次記録を削除", style: "destructive", onPress: clearAllRecords },
   ]);
 
-  if (!isReady) return <ScreenContainer />;
+  if (!isReady || !headacheEventsReady) return <ScreenContainer />;
   const hasSamples = records.some((record) => record.isSample);
 
   return (
@@ -130,6 +166,11 @@ export default function SettingsScreen() {
           <View style={styles.dataIntro}><View style={[styles.dataIcon, { backgroundColor: `${colors.primary}16` }]}><MaterialIcons name="lock-outline" size={21} color={colors.primary} /></View><View style={styles.timeCopy}><Text style={[styles.timeLabel, { color: colors.foreground }]}>端末内に保存</Text><Text style={[styles.timeHint, { color: colors.muted }]}>アカウント登録なし。CSVで控えを作れます。</Text></View></View>
           <PrimaryButton label={busy ? "処理中…" : "CSVを書き出す"} icon="file-download" disabled={busy || records.length === 0} onPress={() => void doExport()} />
           <PrimaryButton label={busy ? "処理中…" : "CSVを読み込む"} icon="file-upload" secondary disabled={busy} onPress={() => void doImport()} />
+          <View style={[styles.backupDivider, { backgroundColor: colors.border }]} />
+          <Text style={[styles.backupTitle, { color: colors.foreground }]}>頭痛イベント（JSON）</Text>
+          <Text style={[styles.timeHint, { color: colors.muted }]}>発生日時・複数症状・天候を完全に復元します。既存の睡眠CSVとは別です。</Text>
+          <PrimaryButton label={busy ? "処理中…" : `頭痛イベントを書き出す（${headacheEvents.length}件）`} icon="file-download" disabled={busy || headacheEvents.length === 0} onPress={() => void doHeadacheExport()} />
+          <PrimaryButton label={busy ? "処理中…" : "頭痛イベントを復元"} icon="file-upload" secondary disabled={busy} onPress={() => void doHeadacheImport()} />
         </Card>
 
         <SectionLabel title="サンプルデータ" />
@@ -140,8 +181,8 @@ export default function SettingsScreen() {
 
         <SectionLabel title="危険な操作" />
         <Card style={[styles.dangerCard, { borderColor: `${colors.error}4D` }]}>
-          <View style={styles.dataIntro}><View style={[styles.dataIcon, { backgroundColor: `${colors.error}16` }]}><MaterialIcons name="delete-forever" size={21} color={colors.error} /></View><View style={styles.timeCopy}><Text style={[styles.timeLabel, { color: colors.foreground }]}>すべての記録を削除</Text><Text style={[styles.timeHint, { color: colors.muted }]}>先にCSVへ書き出しておくと安心です。</Text></View></View>
-          <PrimaryButton label="全記録を削除" icon="delete-forever" secondary onPress={confirmClear} />
+          <View style={styles.dataIntro}><View style={[styles.dataIcon, { backgroundColor: `${colors.error}16` }]}><MaterialIcons name="delete-forever" size={21} color={colors.error} /></View><View style={styles.timeCopy}><Text style={[styles.timeLabel, { color: colors.foreground }]}>睡眠・日次記録をすべて削除</Text><Text style={[styles.timeHint, { color: colors.muted }]}>頭痛イベントは削除されません。先にCSVへ書き出しておくと安心です。</Text></View></View>
+          <PrimaryButton label="睡眠・日次記録を全削除" icon="delete-forever" secondary onPress={confirmClear} />
         </Card>
 
         <View style={[styles.disclaimer, { backgroundColor: `${colors.muted}12` }]}><MaterialIcons name="info-outline" size={17} color={colors.muted} /><Text style={[styles.disclaimerText, { color: colors.muted }]}>Sleep Log は生活記録・傾向把握のためのアプリです。医学的な診断や治療の判断には使用しません。</Text></View>
@@ -163,6 +204,8 @@ const styles = StyleSheet.create({
   dataIcon: { width: 41, height: 41, borderRadius: 14, alignItems: "center", justifyContent: "center" },
   sampleText: { fontSize: 13, lineHeight: 20 },
   dangerCard: { gap: 13 },
+  backupDivider: { height: StyleSheet.hairlineWidth, marginVertical: 2 },
+  backupTitle: { fontSize: 14, lineHeight: 20, fontWeight: "800" },
   disclaimer: { flexDirection: "row", alignItems: "flex-start", gap: 8, padding: 13, borderRadius: 14 },
   disclaimerText: { flex: 1, fontSize: 12, lineHeight: 18 },
 });

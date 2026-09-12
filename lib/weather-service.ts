@@ -21,6 +21,7 @@ export class WeatherError extends Error {
 type Coordinates = { latitude: number; longitude: number };
 type GeolocationProvider = Pick<Geolocation, "getCurrentPosition">;
 type FetchProvider = typeof fetch;
+export type CurrentWeatherSnapshot = WeatherSnapshot & { observedAt: string };
 
 export function weatherCodeToJapanese(code: number) {
   if (code === 0) return "快晴";
@@ -47,6 +48,7 @@ export function buildOpenMeteoUrl({ latitude, longitude }: Coordinates) {
     longitude: String(longitude),
     current: "temperature_2m,surface_pressure,weather_code",
     timezone: "auto",
+    timeformat: "unixtime",
   });
   return `${OPEN_METEO_FORECAST_URL}?${params.toString()}`;
 }
@@ -70,7 +72,7 @@ export function requestCurrentCoordinates(provider?: GeolocationProvider): Promi
   });
 }
 
-export async function fetchCurrentWeather(coordinates: Coordinates, fetcher: FetchProvider = fetch): Promise<WeatherSnapshot> {
+export async function fetchCurrentWeather(coordinates: Coordinates, fetcher: FetchProvider = fetch): Promise<CurrentWeatherSnapshot> {
   let response: Response;
   try {
     response = await fetcher(buildOpenMeteoUrl(coordinates), { headers: { Accept: "application/json" } });
@@ -81,11 +83,12 @@ export async function fetchCurrentWeather(coordinates: Coordinates, fetcher: Fet
     throw new WeatherError("network", "天気APIからデータを取得できませんでした。しばらくしてから、もう一度お試しください。");
   }
 
-  const body = await response.json() as { current?: { temperature_2m?: unknown; surface_pressure?: unknown; weather_code?: unknown } };
+  const body = await response.json() as { current?: { time?: unknown; temperature_2m?: unknown; surface_pressure?: unknown; weather_code?: unknown } };
   const temperatureC = Number(body.current?.temperature_2m);
   const pressureHpa = Number(body.current?.surface_pressure);
   const weatherCode = Number(body.current?.weather_code);
-  if (![temperatureC, pressureHpa, weatherCode].every(Number.isFinite)) {
+  const observedAtSeconds = Number(body.current?.time);
+  if (![temperatureC, pressureHpa, weatherCode, observedAtSeconds].every(Number.isFinite)) {
     throw new WeatherError("invalid-response", "天気APIの応答を読み取れませんでした。しばらくしてから、もう一度お試しください。");
   }
 
@@ -94,6 +97,7 @@ export async function fetchCurrentWeather(coordinates: Coordinates, fetcher: Fet
     temperatureC: Math.round(temperatureC * 10) / 10,
     condition: weatherCodeToJapanese(weatherCode),
     weatherCode: Math.round(weatherCode),
+    observedAt: new Date(observedAtSeconds * 1000).toISOString(),
     fetchedAt: new Date().toISOString(),
     source: "Open-Meteo",
   };

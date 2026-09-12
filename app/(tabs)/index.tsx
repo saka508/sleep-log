@@ -82,6 +82,9 @@ export default function TodayScreen() {
           <View style={styles.buttonSpacer}>
             <PrimaryButton label={record ? "記録を編集" : "記録を追加"} icon={record ? "edit" : "add"} onPress={openRecord} />
           </View>
+          <View style={styles.headacheButton}>
+            <PrimaryButton label="頭痛イベントを記録" icon="healing" secondary onPress={() => router.push("/headache-event")} />
+          </View>
         </Card>
 
         <SectionLabel title="最近のようす" />
@@ -124,6 +127,7 @@ const styles = StyleSheet.create({
   missingTitle: { fontSize: 15, lineHeight: 21, fontWeight: "800" },
   missingText: { fontSize: 13, lineHeight: 19 },
   buttonSpacer: { marginTop: 12 },
+  headacheButton: { marginTop: 9 },
   insightCard: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
   insightIcon: { width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center" },
   insightValue: { fontSize: 20, lineHeight: 27, fontWeight: "900", marginTop: 2 },

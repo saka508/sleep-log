@@ -16,6 +16,7 @@ const MAPPING = {
   "moon.stars.fill": "bedtime",
   calendar: "calendar-month",
   "chart.xyaxis.line": "insights",
+  "cross.case.fill": "healing",
   "gearshape.fill": "settings",
 } as IconMapping;
 
