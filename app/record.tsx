@@ -11,6 +11,7 @@ import { formatAcquiredAt, formatDate, HEADACHE_FEATURE_OPTIONS, isDateKey, isTi
 import { fetchWeatherForCurrentLocation, OPEN_METEO_ATTRIBUTION_URL, WeatherError } from "@/lib/weather-service";
 
 type BoolChoice = "yes" | "no";
+type OptionalScoreChoice = "none" | "record";
 
 export default function RecordScreen() {
   const colors = useColors();
@@ -26,7 +27,9 @@ export default function RecordScreen() {
   const [napMinutes, setNapMinutes] = useState("0");
   const [nap, setNap] = useState<BoolChoice>("no");
   const [sleepiness, setSleepiness] = useState(4);
+  const [fatigue, setFatigue] = useState<number | undefined>();
   const [clarity, setClarity] = useState(7);
+  const [muscleFatigue, setMuscleFatigue] = useState<number | undefined>();
   const [caffeine, setCaffeine] = useState<BoolChoice>("no");
   const [caffeineTime, setCaffeineTime] = useState("");
   const [caffeineNote, setCaffeineNote] = useState("");
@@ -52,7 +55,9 @@ export default function RecordScreen() {
       setNapMinutes("0");
       setNap("no");
       setSleepiness(4);
+      setFatigue(undefined);
       setClarity(7);
+      setMuscleFatigue(undefined);
       setCaffeine("no");
       setCaffeineTime("");
       setCaffeineNote("");
@@ -72,7 +77,9 @@ export default function RecordScreen() {
     setNapMinutes(String(source.napMinutes));
     setNap(source.napMinutes > 0 ? "yes" : "no");
     setSleepiness(source.sleepiness);
+    setFatigue(source.fatigue);
     setClarity(source.clarity);
+    setMuscleFatigue(source.muscleFatigue);
     setCaffeine(source.caffeine ? "yes" : "no");
     setCaffeineTime(source.caffeineTime ?? "");
     setCaffeineNote(source.caffeineNote ?? "");
@@ -146,7 +153,9 @@ export default function RecordScreen() {
       latencyMinutes: Math.round(latency),
       napMinutes: Math.round(napDuration),
       sleepiness,
+      ...(fatigue !== undefined ? { fatigue } : {}),
       clarity,
+      ...(muscleFatigue !== undefined ? { muscleFatigue } : {}),
       caffeine: caffeine === "yes",
       caffeineTime: caffeine === "yes" ? caffeineTime.trim() : "",
       caffeineNote: caffeine === "yes" ? caffeineNote.trim() : "",
@@ -286,6 +295,8 @@ export default function RecordScreen() {
               <ScorePicker value={clarity} onChange={setClarity} accent="#189B87" accessibilityLabel="頭の冴えを選択" />
               <View style={styles.scoreLegend}><Text style={[styles.legendText, { color: colors.muted }]}>ぼんやり</Text><Text style={[styles.legendText, { color: colors.muted }]}>よく冴えている</Text></View>
             </View>
+            <OptionalScoreInput label="疲労" value={fatigue} onChange={setFatigue} accent="#D97706" low="疲労なし" high="とても疲れている" accessibilityLabel="疲労を選択" />
+            <OptionalScoreInput label="筋肉疲労" value={muscleFatigue} onChange={setMuscleFatigue} accent="#DC2626" low="なし" high="とても強い" accessibilityLabel="筋肉疲労を選択" />
             <View style={styles.formGroup}>
               <FieldLabel label="カフェイン" />
               <ChoicePills value={caffeine} onChange={setCaffeine} options={[{ value: "no", label: "なし", icon: "block" }, { value: "yes", label: "あり", icon: "local-cafe" }]} />
@@ -319,6 +330,7 @@ export default function RecordScreen() {
               </View>
             ) : null}
           </Card>
+          <Text style={[styles.subjectiveCaution, { color: colors.muted }]}>疲労・筋肉疲労は本人の記録であり、医学的な診断ではありません。</Text>
 
           <SectionLabel title="その日の体調メモ" />
           <Card>
@@ -335,6 +347,16 @@ export default function RecordScreen() {
 function WeatherValue({ label, value }: { label: string; value: string }) {
   const colors = useColors();
   return <View style={styles.weatherValue}><Text style={[styles.weatherValueLabel, { color: colors.muted }]}>{label}</Text><Text style={[styles.weatherValueText, { color: colors.foreground }]}>{value}</Text></View>;
+}
+
+function OptionalScoreInput({ label, value, onChange, accent, low, high, accessibilityLabel }: { label: string; value?: number; onChange: (value: number | undefined) => void; accent: string; low: string; high: string; accessibilityLabel: string }) {
+  const colors = useColors();
+  const choice: OptionalScoreChoice = value === undefined ? "none" : "record";
+  return <View style={styles.formGroup}>
+    <FieldLabel label={label} hint={value === undefined ? "任意" : `${value} / 10`} />
+    <ChoicePills value={choice} onChange={(next) => onChange(next === "none" ? undefined : value ?? 0)} options={[{ value: "none", label: "未入力", icon: "remove" }, { value: "record", label: "入力する", icon: "edit" }]} />
+    {value !== undefined ? <><ScorePicker value={value} onChange={onChange} accent={accent} accessibilityLabel={accessibilityLabel} /><View style={styles.scoreLegend}><Text style={[styles.legendText, { color: colors.muted }]}>{low}</Text><Text style={[styles.legendText, { color: colors.muted }]}>{high}</Text></View></> : null}
+  </View>;
 }
 
 const styles = StyleSheet.create({
@@ -366,5 +388,6 @@ const styles = StyleSheet.create({
   weatherTime: { fontSize: 11, lineHeight: 16 },
   weatherMessage: { fontSize: 12, lineHeight: 18 },
   weatherCaution: { fontSize: 11, lineHeight: 17 },
+  subjectiveCaution: { fontSize: 11, lineHeight: 17, paddingHorizontal: 3 },
   attribution: { minHeight: 32, paddingVertical: 6, alignSelf: "flex-start", fontSize: 12, lineHeight: 18, fontWeight: "800", textDecorationLine: "underline" },
 });

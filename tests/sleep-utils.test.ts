@@ -80,7 +80,9 @@ describe("CSV import and export", () => {
       latencyMinutes: 20,
       napMinutes: 15,
       sleepiness: 4,
+      fatigue: 0,
       clarity: 7,
+      muscleFatigue: 8,
       caffeine: true,
       caffeineTime: "14:30",
       caffeineNote: "コーヒー 1杯",
@@ -105,6 +107,8 @@ describe("CSV import and export", () => {
     expect(parsed[0]).toMatchObject({
       date: "2026-09-09",
       sleepMinutes: 450,
+      fatigue: 0,
+      muscleFatigue: 8,
       caffeine: true,
       caffeineTime: "14:30",
       caffeineNote: "コーヒー 1杯",
@@ -123,6 +127,7 @@ describe("CSV import and export", () => {
     });
     expect(csv).toContain("片側／吐き気／光や音がつらい");
     expect(csv.split("\n")[0]).toContain("天候データ提供元");
+    expect(csv.split("\n")[0]).toMatch(/疲労（0-10）,筋肉疲労（0-10）$/);
   });
 
   it("imports a Phase 1 CSV with all original columns and safe defaults", () => {
@@ -136,6 +141,8 @@ describe("CSV import and export", () => {
       headacheFeatures: [],
       note: "旧形式",
     });
+    expect(recordsFromCsv(legacyCsv)[0]).not.toHaveProperty("fatigue");
+    expect(recordsFromCsv(legacyCsv)[0]).not.toHaveProperty("muscleFatigue");
   });
 });
 
@@ -151,12 +158,14 @@ describe("stored record compatibility", () => {
     expect(normalized).toMatchObject({
       caffeineTime: "", caffeineNote: "", headacheIntensity: 0, headacheFeatures: [],
     });
+    expect(normalized).not.toHaveProperty("fatigue");
+    expect(normalized).not.toHaveProperty("muscleFatigue");
   });
 
   it("preserves valid detailed fields through JSON storage", () => {
     const stored = JSON.parse(JSON.stringify({
       id: "2026-09-09", date: "2026-09-09", bedTime: "23:30", wakeTime: "07:00",
-      sleepMinutes: 450, latencyMinutes: 20, napMinutes: 30, sleepiness: 4, clarity: 7,
+      sleepMinutes: 450, latencyMinutes: 20, napMinutes: 30, sleepiness: 4, fatigue: 0, clarity: 7, muscleFatigue: 14,
       caffeine: true, caffeineTime: "15:00", caffeineNote: "紅茶 1杯",
       headache: true, headacheIntensity: 4, headacheFeatures: ["aroundEyes", "other"], note: "",
       createdAt: "2026-09-09T00:00:00.000Z", updatedAt: "2026-09-09T00:00:00.000Z",
@@ -164,7 +173,7 @@ describe("stored record compatibility", () => {
     }));
 
     expect(normalizeSleepRecord(stored)).toMatchObject({
-      napMinutes: 30, caffeineTime: "15:00", caffeineNote: "紅茶 1杯",
+      napMinutes: 30, caffeineTime: "15:00", caffeineNote: "紅茶 1杯", fatigue: 0, muscleFatigue: 10,
       headacheIntensity: 4, headacheFeatures: ["aroundEyes", "other"],
       weather: { pressureHpa: 998.4, temperatureC: 24.1, condition: "雨", weatherCode: 61, source: "Open-Meteo" },
     });

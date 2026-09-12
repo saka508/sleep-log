@@ -76,6 +76,12 @@ describe("daily condition compatibility model", () => {
     expect(dailyConditionFromSleepRecord(sleepRecord({ note: "" })).note).toBeUndefined();
   });
 
+  it("maps optional fatigue values without turning absent values into zero", () => {
+    expect(dailyConditionFromSleepRecord(sleepRecord({ fatigue: 0, muscleFatigue: 6 })).subjective).toMatchObject({ fatigue: 0, muscleFatigue: 6 });
+    expect(dailyConditionFromSleepRecord(sleepRecord()).subjective).not.toHaveProperty("fatigue");
+    expect(dailyConditionFromSleepRecord(sleepRecord()).subjective).not.toHaveProperty("muscleFatigue");
+  });
+
   it("maps an optional weather snapshot without coordinates", () => {
     const condition = dailyConditionFromSleepRecord(sleepRecord({
       weather: { pressureHpa: 1001.5, temperatureC: 25.2, condition: "晴れ", weatherCode: 1, fetchedAt: "2026-09-09T04:00:00.000Z", source: "Open-Meteo" },

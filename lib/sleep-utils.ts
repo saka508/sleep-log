@@ -27,6 +27,7 @@ export type SleepRecord = {
   latencyMinutes: number;
   napMinutes: number;
   sleepiness: number;
+  fatigue?: number;
   clarity: number;
   caffeine: boolean;
   caffeineTime?: string;
@@ -34,6 +35,7 @@ export type SleepRecord = {
   headache: boolean;
   headacheIntensity?: number;
   headacheFeatures?: HeadacheFeature[];
+  muscleFatigue?: number;
   weather?: WeatherSnapshot;
   note: string;
   isSample?: boolean;
@@ -74,6 +76,13 @@ export function getHeadacheFeatureLabel(feature: HeadacheFeature) {
 export function normalizeSleepRecord(value: Partial<SleepRecord>): SleepRecord | null {
   if (!value.date || !value.id || !value.bedTime || !value.wakeTime) return null;
   const safeScore = (score: unknown) => Math.max(0, Math.min(10, Math.round(Number(score) || 0)));
+  const optionalScore = (score: unknown) => {
+    if (score === null || score === undefined || score === "") return undefined;
+    const parsed = Number(score);
+    return Number.isFinite(parsed) ? Math.max(0, Math.min(10, Math.round(parsed))) : undefined;
+  };
+  const fatigue = optionalScore(value.fatigue);
+  const muscleFatigue = optionalScore(value.muscleFatigue);
   const headache = Boolean(value.headache);
   const caffeine = Boolean(value.caffeine);
   const headacheFeatures = Array.isArray(value.headacheFeatures)
@@ -89,6 +98,7 @@ export function normalizeSleepRecord(value: Partial<SleepRecord>): SleepRecord |
     latencyMinutes: Math.max(0, Number(value.latencyMinutes) || 0),
     napMinutes: Math.max(0, Number(value.napMinutes) || 0),
     sleepiness: safeScore(value.sleepiness),
+    ...(fatigue !== undefined ? { fatigue } : {}),
     clarity: safeScore(value.clarity),
     caffeine,
     caffeineTime: caffeine && typeof value.caffeineTime === "string" && isTime(value.caffeineTime) ? value.caffeineTime : "",
@@ -96,6 +106,7 @@ export function normalizeSleepRecord(value: Partial<SleepRecord>): SleepRecord |
     headache,
     headacheIntensity: headache ? safeScore(value.headacheIntensity) : 0,
     headacheFeatures: headache ? headacheFeatures : [],
+    ...(muscleFatigue !== undefined ? { muscleFatigue } : {}),
     ...(weather ? { weather } : {}),
     note: typeof value.note === "string" ? value.note : "",
     isSample: Boolean(value.isSample),

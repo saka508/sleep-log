@@ -112,10 +112,12 @@ export function dailyConditionFromSleepRecord(record: SleepRecord): DailyConditi
     subjective: {
       source: "manual",
       sleepiness: record.sleepiness,
+      ...(record.fatigue !== undefined ? { fatigue: record.fatigue } : {}),
       clarity: record.clarity,
       headache: record.headache,
       headacheIntensity: record.headacheIntensity,
       headacheFeatures: record.headacheFeatures,
+      ...(record.muscleFatigue !== undefined ? { muscleFatigue: record.muscleFatigue } : {}),
     },
     ...(record.weather ? {
       environment: {
