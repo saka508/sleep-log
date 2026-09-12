@@ -153,7 +153,7 @@ export function summarizeTrend(points: TrendPoint[]): MetricSummary {
   return { average: values.length ? mean(values) : null, median: median(values), dataDays: values.length };
 }
 
-function relationResult(key: RelationKey, label: string, xLabel: string, yLabel: string, pairs: Array<{ x: number; y: number }>): RelationResult {
+function relationResult(key: RelationKey, label: string, xLabel: string, yLabel: string, pairs: { x: number; y: number }[]): RelationResult {
   if (pairs.length < MIN_RELATION_RECORDS) return { key, label, xLabel, yLabel, pairedCount: pairs.length, coefficient: null, status: "insufficient" };
   const coefficient = correlation(pairs);
   return { key, label, xLabel, yLabel, pairedCount: pairs.length, coefficient, status: coefficient === null ? "constant" : "ready" };
