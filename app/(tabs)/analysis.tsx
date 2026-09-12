@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Alert, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { ConditionTrendChart } from "@/components/condition-trend-chart";
@@ -24,16 +24,12 @@ export default function AnalysisScreen() {
   const summary = useMemo(() => summarizeTrend(trend), [trend]);
   const relations = useMemo(() => RELATIONS.map((key) => analyzeRelation(records, key)), [records]);
   const recommendation = useMemo(() => buildSleepRecommendation(records), [records]);
-  const [bedTime, setBedTime] = useState("");
-  const [wakeTime, setWakeTime] = useState("");
-  const [sleepMinutes, setSleepMinutes] = useState("");
-
-  useEffect(() => {
-    if (recommendation.status !== "ready") return;
-    setBedTime(settings.recommendationBedTime ?? recommendation.bedTime);
-    setWakeTime(settings.recommendationWakeTime ?? recommendation.wakeTime);
-    setSleepMinutes(String(settings.recommendationSleepMinutes ?? recommendation.targetSleepMinutes));
-  }, [recommendation, settings.recommendationBedTime, settings.recommendationWakeTime, settings.recommendationSleepMinutes]);
+  const [bedTimeOverride, setBedTime] = useState<string | null>(null);
+  const [wakeTimeOverride, setWakeTime] = useState<string | null>(null);
+  const [sleepMinutesOverride, setSleepMinutes] = useState<string | null>(null);
+  const bedTime = bedTimeOverride ?? (recommendation.status === "ready" ? settings.recommendationBedTime ?? recommendation.bedTime : "");
+  const wakeTime = wakeTimeOverride ?? (recommendation.status === "ready" ? settings.recommendationWakeTime ?? recommendation.wakeTime : "");
+  const sleepMinutes = sleepMinutesOverride ?? (recommendation.status === "ready" ? String(settings.recommendationSleepMinutes ?? recommendation.targetSleepMinutes) : "");
 
   const saveOverrides = () => {
     const minutes = Number(sleepMinutes);
