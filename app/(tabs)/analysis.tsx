@@ -12,7 +12,7 @@ import { formatDuration, isTime } from "@/lib/sleep-utils";
 
 const METRIC_OPTIONS: { value: AnalysisMetric; label: string }[] = [
   { value: "sleepMinutes", label: "睡眠" }, { value: "bedTime", label: "就寝" }, { value: "wakeTime", label: "起床" }, { value: "napMinutes", label: "昼寝" },
-  { value: "sleepiness", label: "眠気" }, { value: "clarity", label: "冴え" }, { value: "headacheIntensity", label: "頭痛" }, { value: "pressureHpa", label: "気圧" },
+  { value: "sleepiness", label: "眠気" }, { value: "fatigue", label: "疲労" }, { value: "clarity", label: "冴え" }, { value: "headacheIntensity", label: "頭痛" }, { value: "muscleFatigue", label: "筋肉疲労" }, { value: "pressureHpa", label: "気圧" },
 ];
 const RELATIONS: RelationKey[] = ["sleepSleepiness", "sleepClarity", "napSleep", "pressureHeadache", "pressureChangeHeadache", "caffeineTimeSleep", "caffeineTimeSleepiness"];
 

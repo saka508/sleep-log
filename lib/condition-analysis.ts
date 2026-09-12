@@ -8,8 +8,10 @@ export type AnalysisMetric =
   | "wakeTime"
   | "napMinutes"
   | "sleepiness"
+  | "fatigue"
   | "clarity"
   | "headacheIntensity"
+  | "muscleFatigue"
   | "pressureHpa";
 
 export type TrendPoint = {
@@ -87,8 +89,10 @@ const metricLabels: Record<AnalysisMetric, string> = {
   wakeTime: "起床時刻",
   napMinutes: "昼寝時間",
   sleepiness: "眠気",
+  fatigue: "疲労",
   clarity: "頭の冴え",
   headacheIntensity: "頭痛の強さ",
+  muscleFatigue: "筋肉疲労",
   pressureHpa: "気圧",
 };
 
@@ -116,8 +120,10 @@ export function getAnalysisMetricValue(record: SleepRecord, metric: AnalysisMetr
       return record.headache ? (Number.isFinite(record.headacheIntensity) ? record.headacheIntensity ?? null : null) : 0;
     case "pressureHpa":
       return Number.isFinite(record.weather?.pressureHpa) ? record.weather?.pressureHpa ?? null : null;
-    default:
-      return Number.isFinite(record[metric]) ? record[metric] : null;
+    default: {
+      const value = record[metric];
+      return Number.isFinite(value) ? value ?? null : null;
+    }
   }
 }
 
