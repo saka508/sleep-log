@@ -12,6 +12,15 @@ function record(date: string, overrides: Partial<SleepRecord> = {}): SleepRecord
 }
 
 describe("condition analysis trends", () => {
+  it("excludes sample records from a personal trend", () => {
+    const trend = buildTrend([
+      record("2026-09-01", { isSample: true, sleepMinutes: 300 }),
+      record("2026-09-02", { sleepMinutes: 450 }),
+    ], "sleepMinutes", "day");
+
+    expect(trend).toEqual([expect.objectContaining({ key: "2026-09-02", value: 450 })]);
+  });
+
   it("keeps missing pressure as null instead of fabricating zero", () => {
     const trend = buildTrend([record("2026-09-01"), record("2026-09-02", { weather: { pressureHpa: 1002, temperatureC: 22, condition: "曇り", weatherCode: 3, fetchedAt: "2026-09-02T00:00:00.000Z", source: "Open-Meteo" } })], "pressureHpa", "day");
     expect(trend.map((point) => point.value)).toEqual([null, 1002]);
@@ -26,6 +35,16 @@ describe("condition analysis trends", () => {
 });
 
 describe("condition analysis relations", () => {
+  it("does not count sample records as complete relation pairs", () => {
+    const personal = Array.from({ length: 4 }, (_, index) => record(`2026-09-0${index + 1}`, { sleepiness: index + 2 }));
+    const sample = record("2026-09-05", { isSample: true, sleepiness: 9 });
+
+    expect(analyzeRelation([...personal, sample], "sleepSleepiness")).toMatchObject({
+      status: "insufficient",
+      pairedCount: 4,
+    });
+  });
+
   it("reports insufficient data rather than a correlation for fewer than five complete pairs", () => {
     const result = analyzeRelation([record("2026-09-01"), record("2026-09-02"), record("2026-09-03")], "sleepSleepiness");
     expect(result).toMatchObject({ status: "insufficient", pairedCount: 3, coefficient: null });

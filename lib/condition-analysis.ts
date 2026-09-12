@@ -77,6 +77,14 @@ export function getAnalysisMetricLabel(metric: AnalysisMetric) {
   return metricLabels[metric];
 }
 
+/**
+ * Sample records make the first launch easier to understand, but must never
+ * influence a person's trend, correlation, or reference values.
+ */
+export function recordsForPersonalAnalysis(records: SleepRecord[]) {
+  return records.filter((record) => !record.isSample);
+}
+
 export function getAnalysisMetricValue(record: SleepRecord, metric: AnalysisMetric): number | null {
   switch (metric) {
     case "bedTime":
@@ -132,7 +140,7 @@ function groupFor(date: string, granularity: AnalysisGranularity) {
 /** Aggregates only valid values; empty groups stay null and are never coerced to zero. */
 export function buildTrend(records: SleepRecord[], metric: AnalysisMetric, granularity: AnalysisGranularity): TrendPoint[] {
   const groups = new Map<string, { label: string; recordDays: number; values: number[] }>();
-  records.slice().sort((a, b) => a.date.localeCompare(b.date)).forEach((record) => {
+  recordsForPersonalAnalysis(records).slice().sort((a, b) => a.date.localeCompare(b.date)).forEach((record) => {
     const group = groupFor(record.date, granularity);
     const current = groups.get(group.key) ?? { label: group.label, recordDays: 0, values: [] };
     current.recordDays += 1;
@@ -176,7 +184,7 @@ function consecutiveDay(previous: string, current: string) {
 }
 
 export function analyzeRelation(records: SleepRecord[], key: RelationKey): RelationResult {
-  const ordered = records.slice().sort((a, b) => a.date.localeCompare(b.date));
+  const ordered = recordsForPersonalAnalysis(records).slice().sort((a, b) => a.date.localeCompare(b.date));
   switch (key) {
     case "sleepSleepiness":
       return relationResult(key, "睡眠時間と眠気", "睡眠時間", "眠気", pairedMetric(ordered, "sleepMinutes", "sleepiness"));
@@ -212,7 +220,7 @@ export function analyzeRelation(records: SleepRecord[], key: RelationKey): Relat
 }
 
 export function buildSleepRecommendation(records: SleepRecord[]): SleepRecommendation {
-  const qualifying = records.filter((record) => !record.isSample && record.sleepiness <= 3 && record.clarity >= 7);
+  const qualifying = recordsForPersonalAnalysis(records).filter((record) => record.sleepiness <= 3 && record.clarity >= 7);
   if (qualifying.length < MIN_RECOMMENDATION_RECORDS) {
     return { status: "insufficient", qualifyingDays: qualifying.length, minimumDays: MIN_RECOMMENDATION_RECORDS };
   }
