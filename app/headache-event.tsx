@@ -3,8 +3,9 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useMemo, useState } from "react";
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Linking, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
 
-import { AppTextInput, Card, ChoicePills, FieldLabel, MultiChoicePills, PageHeader, PrimaryButton, ScorePicker, SectionLabel } from "@/components/sleep-ui";
+import { Card, ChoicePills, FieldLabel, MultiChoicePills, PageHeader, PrimaryButton, ScorePicker, SectionLabel } from "@/components/sleep-ui";
 import { ScreenContainer } from "@/components/screen-container";
+import { LocalDatePicker, LocalTimePicker } from "@/components/local-date-time-picker";
 import { useColors } from "@/hooks/use-colors";
 import { createHeadacheEventId, localDateTimeToIso, type HeadacheEventWeatherSnapshot } from "@/lib/headache-events";
 import { useHeadacheEvents } from "@/lib/headache-store";
@@ -101,7 +102,8 @@ function HeadacheEventForm() {
 
           <SectionLabel title="発生した日時" />
           <Card style={styles.formCard}>
-            <View style={styles.twoColumns}><View style={styles.flexField}><FieldLabel label="日付" /><AppTextInput value={date} onChangeText={setDate} placeholder="2026-09-13" /></View><View style={styles.flexField}><FieldLabel label="時刻" /><AppTextInput value={time} onChangeText={setTime} placeholder="14:30" keyboardType="numbers-and-punctuation" maxLength={5} /></View></View>
+            <View style={styles.formGroup}><FieldLabel label="日付" /><LocalDatePicker value={date} onChange={setDate} accessibilityLabel="頭痛イベントの日付を選択" /></View>
+            <LocalTimePicker label="発生時刻" value={time} onChange={setTime} accessibilityLabel="頭痛イベントの発生時刻を選択" />
           </Card>
 
           <SectionLabel title="強さ・症状" />
@@ -142,7 +144,7 @@ function WeatherValue({ label, value }: { label: string; value: string }) {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 }, content: { paddingHorizontal: 14, paddingTop: 10, paddingBottom: 26, gap: 12 }, formCard: { gap: 14 },
-  twoColumns: { flexDirection: "row", gap: 10 }, flexField: { flex: 1, minWidth: 0 }, symptoms: { gap: 2, marginTop: 4 },
+  formGroup: { gap: 4 }, symptoms: { gap: 2, marginTop: 4 },
   weatherBox: { padding: 12, borderWidth: 1, borderRadius: 14, gap: 8 }, weatherValues: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   weatherValue: { minWidth: 75, flex: 1, gap: 2 }, weatherLabel: { fontSize: 11, lineHeight: 15, fontWeight: "700" }, weatherNumber: { fontSize: 15, lineHeight: 21, fontWeight: "900" },
   weatherTime: { fontSize: 10, lineHeight: 15 }, message: { fontSize: 11, lineHeight: 17 }, link: { minHeight: 32, paddingVertical: 6, alignSelf: "flex-start", fontSize: 12, lineHeight: 18, fontWeight: "800", textDecorationLine: "underline" },
