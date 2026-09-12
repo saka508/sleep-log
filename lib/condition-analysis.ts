@@ -44,6 +44,25 @@ export type RelationResult = {
   status: "ready" | "insufficient" | "constant";
 };
 
+export type AnalysisQualityStatus = "empty" | "insufficient" | "reference" | "partial" | "sufficient";
+
+export type AnalysisQuality = {
+  periodLabel: string;
+  totalRecords: number;
+  personalRecords: number;
+  excludedSampleRecords: number;
+  validMetricRecords: number;
+  missingMetricRecords: number;
+  periodGroups: number;
+  validPeriodGroups: number;
+  metricLabel: string;
+  minimumRelationPairs: number;
+  relationPairs: Pick<RelationResult, "key" | "label" | "pairedCount" | "status">[];
+  status: AnalysisQualityStatus;
+  statusLabel: string;
+  message: string;
+};
+
 export const MIN_RELATION_RECORDS = 5;
 export const MIN_RECOMMENDATION_RECORDS = 7;
 // This is a display safeguard, not a medical target. A shorter historical
@@ -159,6 +178,53 @@ export function buildTrend(records: SleepRecord[], metric: AnalysisMetric, granu
 export function summarizeTrend(points: TrendPoint[]): MetricSummary {
   const values = points.flatMap((point) => point.value === null ? [] : [point.value]);
   return { average: values.length ? mean(values) : null, median: median(values), dataDays: values.length };
+}
+
+function granularityLabel(granularity: AnalysisGranularity) {
+  return granularity === "day" ? "日別" : granularity === "week" ? "週別" : "月別";
+}
+
+function periodLabel(records: SleepRecord[], granularity: AnalysisGranularity) {
+  if (!records.length) return `${granularityLabel(granularity)}・個人記録なし`;
+  const dates = records.map((record) => record.date).sort();
+  const start = dates[0].replaceAll("-", "/");
+  const end = dates.at(-1)?.replaceAll("-", "/") ?? start;
+  return `${granularityLabel(granularity)}・${start}${start === end ? "" : `〜${end}`}`;
+}
+
+/**
+ * Builds display-only metadata for the current personal analysis. It does not
+ * persist results and deliberately reuses the same sample exclusion and
+ * missing-value rules as trends and relations.
+ */
+export function assessAnalysisQuality(
+  records: SleepRecord[],
+  metric: AnalysisMetric,
+  granularity: AnalysisGranularity,
+  relations: RelationResult[],
+): AnalysisQuality {
+  const personalRecords = recordsForPersonalAnalysis(records);
+  const trend = buildTrend(records, metric, granularity);
+  const validMetricRecords = personalRecords.filter((record) => getAnalysisMetricValue(record, metric) !== null).length;
+  const missingMetricRecords = personalRecords.length - validMetricRecords;
+  const base = {
+    periodLabel: periodLabel(personalRecords, granularity),
+    totalRecords: records.length,
+    personalRecords: personalRecords.length,
+    excludedSampleRecords: records.length - personalRecords.length,
+    validMetricRecords,
+    missingMetricRecords,
+    periodGroups: trend.length,
+    validPeriodGroups: trend.filter((point) => point.value !== null).length,
+    metricLabel: getAnalysisMetricLabel(metric),
+    minimumRelationPairs: MIN_RELATION_RECORDS,
+    relationPairs: relations.map(({ key, label, pairedCount, status }) => ({ key, label, pairedCount, status })),
+  };
+  if (!personalRecords.length) return { ...base, status: "empty", statusLabel: "データなし", message: "個人分析に使用できる記録はありません。" };
+  if (!validMetricRecords) return { ...base, status: "insufficient", statusLabel: "データ不足", message: `「${base.metricLabel}」の有効データがないため、参考値は表示していません。` };
+  if (validMetricRecords < MIN_RELATION_RECORDS) return { ...base, status: "reference", statusLabel: "参考表示", message: `「${base.metricLabel}」は ${validMetricRecords} 件です。相関の最低 ${MIN_RELATION_RECORDS} 組には届かないため、参考表示です。` };
+  if (missingMetricRecords) return { ...base, status: "partial", statusLabel: "一部欠損", message: `「${base.metricLabel}」は欠損 ${missingMetricRecords} 件を除外しています。解釈には注意してください。` };
+  return { ...base, status: "sufficient", statusLabel: "十分なデータ", message: `「${base.metricLabel}」は ${validMetricRecords} 件の個人記録を使っています。` };
 }
 
 function relationResult(key: RelationKey, label: string, xLabel: string, yLabel: string, pairs: { x: number; y: number }[]): RelationResult {

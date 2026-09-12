@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { analyzeRelation, buildSleepRecommendation, buildTrend, MIN_RECOMMENDATION_RECORDS, summarizeTrend } from "../lib/condition-analysis";
+import { analyzeRelation, assessAnalysisQuality, buildSleepRecommendation, buildTrend, MIN_RECOMMENDATION_RECORDS, summarizeTrend } from "../lib/condition-analysis";
 import type { SleepRecord } from "../lib/sleep-utils";
 
 function record(date: string, overrides: Partial<SleepRecord> = {}): SleepRecord {
@@ -77,5 +77,49 @@ describe("sleep reference values", () => {
     expect(buildSleepRecommendation(samples)).toMatchObject({ status: "insufficient", qualifyingDays: 0 });
     const short = Array.from({ length: MIN_RECOMMENDATION_RECORDS }, (_, index) => record(`2026-08-${String(index + 1).padStart(2, "0")}`, { sleepMinutes: 360 }));
     expect(buildSleepRecommendation(short)).toMatchObject({ status: "tooShort", targetSleepMinutes: 360 });
+  });
+});
+
+describe("analysis data quality", () => {
+  const relationsFor = (records: SleepRecord[]) => [analyzeRelation(records, "sleepSleepiness")];
+
+  it("keeps sample records in the total while excluding them from personal analysis", () => {
+    const records = [record("2026-09-01", { isSample: true }), record("2026-09-02")];
+    expect(assessAnalysisQuality(records, "sleepMinutes", "day", relationsFor(records))).toMatchObject({
+      totalRecords: 2, personalRecords: 1, excludedSampleRecords: 1, validMetricRecords: 1, missingMetricRecords: 0, status: "reference",
+    });
+  });
+
+  it("counts missing selected-metric values without treating them as zero", () => {
+    const records = [record("2026-09-01"), record("2026-09-02"), record("2026-09-03", { weather: { pressureHpa: 1001, temperatureC: 22, condition: "曇り", weatherCode: 3, fetchedAt: "2026-09-03T00:00:00.000Z", source: "Open-Meteo" } })];
+    expect(assessAnalysisQuality(records, "pressureHpa", "day", relationsFor(records))).toMatchObject({
+      personalRecords: 3, validMetricRecords: 1, missingMetricRecords: 2, status: "reference",
+    });
+  });
+
+  it("reports existing relation pair counts and recomputes period groups", () => {
+    const records = [record("2026-09-07"), record("2026-09-08")];
+    const day = assessAnalysisQuality(records, "sleepMinutes", "day", relationsFor(records));
+    const week = assessAnalysisQuality(records, "sleepMinutes", "week", relationsFor(records));
+    const month = assessAnalysisQuality(records, "sleepMinutes", "month", relationsFor(records));
+    expect(day).toMatchObject({ periodGroups: 2, validPeriodGroups: 2 });
+    expect(week).toMatchObject({ periodGroups: 1, validPeriodGroups: 1 });
+    expect(month).toMatchObject({ periodGroups: 1, validPeriodGroups: 1 });
+    expect(day.relationPairs[0]).toMatchObject({ pairedCount: 2 });
+  });
+
+  it("does not change existing trend results while calculating quality metadata", () => {
+    const records = [record("2026-09-01"), record("2026-09-02", { sleepMinutes: 420 })];
+    const before = buildTrend(records, "sleepMinutes", "day");
+    assessAnalysisQuality(records, "sleepMinutes", "day", relationsFor(records));
+    expect(buildTrend(records, "sleepMinutes", "day")).toEqual(before);
+  });
+
+  it("handles no records, only samples, and all missing values", () => {
+    expect(assessAnalysisQuality([], "sleepMinutes", "day", [])).toMatchObject({ status: "empty", totalRecords: 0 });
+    const samples = [record("2026-09-01", { isSample: true })];
+    expect(assessAnalysisQuality(samples, "sleepMinutes", "day", relationsFor(samples))).toMatchObject({ status: "empty", excludedSampleRecords: 1 });
+    const missing = [record("2026-09-01"), record("2026-09-02")];
+    expect(assessAnalysisQuality(missing, "pressureHpa", "day", relationsFor(missing))).toMatchObject({ status: "insufficient", validMetricRecords: 0, missingMetricRecords: 2 });
   });
 });
