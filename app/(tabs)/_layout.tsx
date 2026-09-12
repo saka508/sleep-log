@@ -32,6 +32,7 @@ export default function TabLayout() {
     >
       <Tabs.Screen name="index" options={{ title: "今日", tabBarIcon: ({ color }) => <IconSymbol size={23} name="moon.stars.fill" color={color} /> }} />
       <Tabs.Screen name="history" options={{ title: "履歴", tabBarIcon: ({ color }) => <IconSymbol size={23} name="calendar" color={color} /> }} />
+      <Tabs.Screen name="headache" options={{ title: "頭痛", tabBarIcon: ({ color }) => <IconSymbol size={23} name="cross.case.fill" color={color} /> }} />
       <Tabs.Screen name="analysis" options={{ title: "分析", tabBarIcon: ({ color }) => <IconSymbol size={23} name="chart.xyaxis.line" color={color} /> }} />
       <Tabs.Screen name="settings" options={{ title: "設定", tabBarIcon: ({ color }) => <IconSymbol size={23} name="gearshape.fill" color={color} /> }} />
     </Tabs>

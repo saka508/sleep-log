@@ -111,7 +111,14 @@ export default function RecordScreen() {
     setWeatherMessage("現在地を確認して、天候データを取得しています…");
     try {
       const snapshot = await fetchWeatherForCurrentLocation();
-      setWeather(snapshot);
+      setWeather({
+        pressureHpa: snapshot.pressureHpa,
+        temperatureC: snapshot.temperatureC,
+        condition: snapshot.condition,
+        weatherCode: snapshot.weatherCode,
+        fetchedAt: snapshot.fetchedAt,
+        source: snapshot.source,
+      });
       setWeatherMessage("取得できました。この記録を保存すると天候データも端末内に保存されます。");
     } catch (error) {
       const message = error instanceof WeatherError ? error.message : "天候データを取得できませんでした。通信状態を確認して、もう一度お試しください。";
@@ -284,6 +291,10 @@ export default function RecordScreen() {
           </Card>
 
           <SectionLabel title="日中のようす" />
+          <Card style={styles.headacheEventLink}>
+            <View style={styles.autoCopy}><Text style={[styles.autoTitle, { color: colors.foreground }]}>発生時刻を残す頭痛記録</Text><Text style={[styles.autoText, { color: colors.muted }]}>下の日次記録とは別に、同じ日に複数回記録できます。</Text></View>
+            <PrimaryButton label="頭痛イベントを記録" icon="healing" secondary onPress={() => router.push("/headache-event")} />
+          </Card>
           <Card style={styles.formCard}>
             <View style={styles.formGroup}>
               <FieldLabel label="眠気" hint={`${sleepiness} / 10`} />
@@ -368,6 +379,7 @@ const styles = StyleSheet.create({
   autoTitle: { fontSize: 15, lineHeight: 21, fontWeight: "800" },
   autoText: { fontSize: 12, lineHeight: 18 },
   formCard: { gap: 14 },
+  headacheEventLink: { gap: 11 },
   formGroup: { gap: 0 },
   conditionalFields: { gap: 12, padding: 12, borderWidth: 1, borderRadius: 14 },
   twoColumns: { flexDirection: "row", gap: 12 },
