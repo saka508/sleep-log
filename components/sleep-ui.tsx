@@ -1,6 +1,7 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { ReactNode, useMemo } from "react";
 import {
+  ActivityIndicator,
   Pressable,
   StyleSheet,
   Text,
@@ -77,33 +78,59 @@ export function PrimaryButton({
   icon,
   secondary = false,
   disabled = false,
+  loading = false,
 }: {
   label: string;
   onPress: () => void;
   icon?: IconName;
   secondary?: boolean;
   disabled?: boolean;
+  loading?: boolean;
 }) {
   const colors = useColors();
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
-      disabled={disabled}
+      disabled={disabled || loading}
       onPress={onPress}
       style={({ pressed }) => [
         styles.primaryButton,
         {
           backgroundColor: secondary ? colors.surface : colors.primary,
           borderColor: secondary ? colors.border : colors.primary,
-          opacity: disabled ? 0.45 : 1,
+          opacity: disabled || loading ? 0.45 : 1,
         },
-        pressed && !disabled && styles.pressed,
+        pressed && !disabled && !loading && styles.pressed,
       ]}
     >
-      {icon ? <MaterialIcons name={icon} size={20} color={secondary ? colors.primary : "#FFFFFF"} /> : null}
+      {loading ? <ActivityIndicator size="small" color={secondary ? colors.primary : "#FFFFFF"} accessibilityLabel={`${label}中`} /> : icon ? <MaterialIcons name={icon} size={20} color={secondary ? colors.primary : "#FFFFFF"} /> : null}
       <Text style={[styles.primaryButtonText, { color: secondary ? colors.primary : "#FFFFFF" }]}>{label}</Text>
     </Pressable>
+  );
+}
+
+export function SaveFeedbackCard({
+  title,
+  detail,
+  actions,
+}: {
+  title: string;
+  detail: string;
+  actions: { label: string; onPress: () => void; icon?: IconName; secondary?: boolean }[];
+}) {
+  const colors = useColors();
+  return (
+    <Card style={[styles.saveFeedback, { borderColor: `${colors.success}46`, backgroundColor: `${colors.success}0D` }]}>
+      <View style={[styles.saveFeedbackIcon, { backgroundColor: `${colors.success}1A` }]}><MaterialIcons name="check-circle" size={24} color={colors.success} /></View>
+      <View style={styles.saveFeedbackCopy} accessibilityLiveRegion="polite">
+        <Text style={[styles.saveFeedbackTitle, { color: colors.foreground }]}>{title}</Text>
+        <Text style={[styles.saveFeedbackDetail, { color: colors.muted }]}>{detail}</Text>
+      </View>
+      <View style={styles.saveFeedbackActions}>
+        {actions.map((action) => <PrimaryButton key={action.label} label={action.label} icon={action.icon} secondary={action.secondary} onPress={action.onPress} />)}
+      </View>
+    </Card>
   );
 }
 
@@ -464,6 +491,12 @@ const styles = StyleSheet.create({
   iconButton: { width: 42, height: 42, borderRadius: 15, borderWidth: 1, alignItems: "center", justifyContent: "center" },
   primaryButton: { minHeight: 54, paddingHorizontal: 16, borderRadius: 16, borderWidth: 1, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8 },
   primaryButtonText: { fontSize: 16, fontWeight: "800", lineHeight: 21 },
+  saveFeedback: { gap: 10, padding: 14 },
+  saveFeedbackIcon: { width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  saveFeedbackCopy: { gap: 2 },
+  saveFeedbackTitle: { fontSize: 16, lineHeight: 22, fontWeight: "900" },
+  saveFeedbackDetail: { fontSize: 12, lineHeight: 18 },
+  saveFeedbackActions: { gap: 8 },
   pressed: { opacity: 0.74, transform: [{ scale: 0.98 }] },
   card: { borderRadius: 18, borderWidth: 1, padding: 15 },
   metricCard: { flex: 1, minWidth: 0, gap: 5 },

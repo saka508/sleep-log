@@ -1,9 +1,9 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { router, useLocalSearchParams } from "expo-router";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Linking, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
 
-import { Card, ChoicePills, FieldLabel, MultiChoicePills, PageHeader, PrimaryButton, ScorePicker, SectionLabel } from "@/components/sleep-ui";
+import { Card, ChoicePills, FieldLabel, MultiChoicePills, PageHeader, PrimaryButton, SaveFeedbackCard, ScorePicker, SectionLabel } from "@/components/sleep-ui";
 import { ScreenContainer } from "@/components/screen-container";
 import { LocalDatePicker, LocalTimePicker } from "@/components/local-date-time-picker";
 import { useColors } from "@/hooks/use-colors";
@@ -39,6 +39,9 @@ function HeadacheEventForm() {
   const [weather, setWeather] = useState<HeadacheEventWeatherSnapshot | undefined>(existing?.weatherSnapshot);
   const [weatherLoading, setWeatherLoading] = useState(false);
   const [weatherMessage, setWeatherMessage] = useState(existing?.weatherSnapshot ? "保存済みの天候データです。" : "");
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveFeedback, setSaveFeedback] = useState<{ date: string; startedAt: string } | null>(null);
+  const saveLock = useRef(false);
 
   const acquireWeather = async () => {
     setWeatherLoading(true);
@@ -64,29 +67,42 @@ function HeadacheEventForm() {
   };
 
   const save = () => {
+    if (saveLock.current) return;
+    setSaveFeedback(null);
     const startedAt = localDateTimeToIso(date, time);
     if (!startedAt) {
       Alert.alert("日時を確認してください", "日付は YYYY-MM-DD、時刻は HH:MM の24時間表記で入力してください。");
       return;
     }
     const now = new Date().toISOString();
-    const success = saveEvent({
-      schemaVersion: 1,
-      id: existing?.id ?? createHeadacheEventId(),
-      date,
-      startedAt,
-      severity,
-      symptoms,
-      ...(weather ? { weatherSnapshot: weather } : {}),
-      source: "manual",
-      createdAt: existing?.createdAt ?? now,
-      updatedAt: now,
-    });
-    if (!success) {
-      Alert.alert("保存できませんでした", "入力内容を確認して、もう一度お試しください。");
-      return;
-    }
-    Alert.alert("保存しました", "頭痛イベントを端末内に保存しました。", [{ text: "OK", onPress: () => router.replace("/headache") }]);
+    saveLock.current = true;
+    setIsSaving(true);
+    setTimeout(() => {
+      try {
+        const success = saveEvent({
+          schemaVersion: 1,
+          id: existing?.id ?? createHeadacheEventId(),
+          date,
+          startedAt,
+          severity,
+          symptoms,
+          ...(weather ? { weatherSnapshot: weather } : {}),
+          source: "manual",
+          createdAt: existing?.createdAt ?? now,
+          updatedAt: now,
+        });
+        if (!success) {
+          Alert.alert("保存に失敗しました", "入力内容はこの画面に残っています。内容を確認して、もう一度お試しください。");
+          return;
+        }
+        setSaveFeedback({ date, startedAt });
+      } catch {
+        Alert.alert("保存に失敗しました", "入力内容はこの画面に残っています。時間をおいてもう一度お試しください。");
+      } finally {
+        saveLock.current = false;
+        setIsSaving(false);
+      }
+    }, 0);
   };
 
   const confirmDelete = () => existing && Alert.alert("この頭痛イベントを削除しますか？", "削除したイベントは元に戻せません。", [
@@ -128,7 +144,16 @@ function HeadacheEventForm() {
             <Text accessibilityRole="link" onPress={() => { void Linking.openURL(OPEN_METEO_ATTRIBUTION_URL); }} style={[styles.link, { color: colors.primary }]}>Weather data by Open-Meteo.com</Text>
           </Card>
 
-          <PrimaryButton label="この頭痛イベントを保存" icon="check" onPress={save} />
+          {saveFeedback ? <SaveFeedbackCard
+            title="頭痛イベントを保存しました"
+            detail={`${saveFeedback.date} ・ 発生 ${formatAcquiredAt(saveFeedback.startedAt)}`}
+            actions={[
+              { label: "ホームへ戻る", icon: "home", onPress: () => router.replace("/") },
+              { label: "頭痛一覧へ戻る", icon: "format-list-bulleted", secondary: true, onPress: () => router.replace("/headache") },
+              { label: "続けて入力", icon: "add", secondary: true, onPress: () => router.replace("/headache-event") },
+            ]}
+          /> : null}
+          <PrimaryButton label={isSaving ? "保存中…" : "この頭痛イベントを保存"} icon="check" loading={isSaving} onPress={save} />
           {existing ? <PrimaryButton label="このイベントを削除" icon="delete-outline" secondary onPress={confirmDelete} /> : null}
           <View style={[styles.disclaimer, { backgroundColor: `${colors.muted}12` }]}><MaterialIcons name="info-outline" size={17} color={colors.muted} /><Text style={[styles.disclaimerText, { color: colors.muted }]}>この記録は本人の振り返り用であり、医学的な診断や原因の判定ではありません。</Text></View>
         </ScrollView>
