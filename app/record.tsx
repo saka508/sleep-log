@@ -8,7 +8,7 @@ import { ScreenContainer } from "@/components/screen-container";
 import { LocalDatePicker, LocalTimePicker } from "@/components/local-date-time-picker";
 import { useColors } from "@/hooks/use-colors";
 import { useSleepData } from "@/lib/sleep-store";
-import { formatAcquiredAt, formatDate, HEADACHE_FEATURE_OPTIONS, isDateKey, isTime, sleepMinutesFromTimes, todayKey, type HeadacheFeature, type SleepRecord, type WeatherSnapshot } from "@/lib/sleep-utils";
+import { formatAcquiredAt, formatDate, formatDuration, HEADACHE_FEATURE_OPTIONS, isDateKey, isTime, sleepMinutesFromTimes, todayKey, type HeadacheFeature, type SleepRecord, type WeatherSnapshot } from "@/lib/sleep-utils";
 import { fetchWeatherForCurrentLocation, OPEN_METEO_ATTRIBUTION_URL, WeatherError } from "@/lib/weather-service";
 
 type BoolChoice = "yes" | "no";
