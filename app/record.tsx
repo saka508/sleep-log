@@ -1,9 +1,9 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { router, useLocalSearchParams } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Linking, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
 
-import { AppTextInput, Card, ChoicePills, FieldLabel, MultiChoicePills, PageHeader, PrimaryButton, ScorePicker, SectionLabel } from "@/components/sleep-ui";
+import { AppTextInput, Card, ChoicePills, FieldLabel, MultiChoicePills, PageHeader, PrimaryButton, SaveFeedbackCard, ScorePicker, SectionLabel } from "@/components/sleep-ui";
 import { ScreenContainer } from "@/components/screen-container";
 import { LocalDatePicker, LocalTimePicker } from "@/components/local-date-time-picker";
 import { useColors } from "@/hooks/use-colors";
@@ -41,6 +41,9 @@ export default function RecordScreen() {
   const [weatherLoading, setWeatherLoading] = useState(false);
   const [weatherMessage, setWeatherMessage] = useState("");
   const [note, setNote] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveFeedback, setSaveFeedback] = useState<{ date: string; sleepMinutes: number } | null>(null);
+  const saveLock = useRef(false);
 
   useEffect(() => {
     const source = existing;
@@ -131,6 +134,8 @@ export default function RecordScreen() {
   };
 
   const save = () => {
+    if (saveLock.current) return;
+    setSaveFeedback(null);
     const minutes = Number(sleepMinutes);
     const latency = Number(latencyMinutes);
     const napDuration = nap === "yes" ? Number(napMinutes) : 0;
@@ -177,10 +182,19 @@ export default function RecordScreen() {
       updatedAt: now,
     };
     const commit = () => {
-      saveRecord(next);
-      Alert.alert("保存しました", "記録を端末内に保存しました。", [
-        { text: "OK", onPress: () => router.replace({ pathname: "/detail/[date]", params: { date } }) },
-      ]);
+      saveLock.current = true;
+      setIsSaving(true);
+      setTimeout(() => {
+        try {
+          saveRecord(next);
+          setSaveFeedback({ date, sleepMinutes: next.sleepMinutes });
+        } catch {
+          Alert.alert("保存に失敗しました", "入力内容はこの画面に残っています。時間をおいてもう一度お試しください。");
+        } finally {
+          saveLock.current = false;
+          setIsSaving(false);
+        }
+      }, 0);
     };
     // Records are keyed by date, so saving onto a date that already has one
     // replaces it. Ask first instead of losing the existing entry silently.
@@ -343,7 +357,15 @@ export default function RecordScreen() {
             <AppTextInput value={note} onChangeText={setNote} placeholder="例：部活のあとで少し昼寝。朝は目覚めがよかった。" multiline textAlignVertical="top" style={styles.noteInput} />
           </Card>
 
-          <PrimaryButton label="この内容で保存" icon="check" onPress={save} />
+          {saveFeedback ? <SaveFeedbackCard
+            title="記録を保存しました"
+            detail={`${formatDate(saveFeedback.date)} ・ 睡眠 ${formatDuration(saveFeedback.sleepMinutes, true)}`}
+            actions={[
+              { label: "ホームへ戻る", icon: "home", onPress: () => router.replace("/") },
+              { label: "続けて入力", icon: "edit", secondary: true, onPress: () => setSaveFeedback(null) },
+            ]}
+          /> : null}
+          <PrimaryButton label={isSaving ? "保存中…" : "この内容で保存"} icon="check" loading={isSaving} onPress={save} />
         </ScrollView>
       </KeyboardAvoidingView>
     </ScreenContainer>
