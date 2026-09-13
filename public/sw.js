@@ -1,12 +1,12 @@
 const BASE = "/sleep-log";
-const SHELL_CACHE = "sleep-log-shell-v7";
-const RUNTIME_CACHE = "sleep-log-runtime-v7";
+const SHELL_CACHE = "sleep-log-shell-v9";
+const RUNTIME_CACHE = "sleep-log-runtime-v9";
 const KEEP = [SHELL_CACHE, RUNTIME_CACHE];
 
 // Every route Expo Router exports, so a deep link opens offline too. Both the
 // pretty and the .html form are listed: GitHub Pages serves the first, a plain
 // static server the second.
-const ROUTES = ["history", "headache", "headache-event", "analysis", "settings", "record"];
+const ROUTES = ["history", "headache", "headache-event", "analysis", "settings", "record", "menu"];
 const SHELL = [
   BASE + "/",
   ...ROUTES.map((route) => `${BASE}/${route}`),
