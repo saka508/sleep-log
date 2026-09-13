@@ -8,6 +8,7 @@ export default function RootHtml({ children }: PropsWithChildren) {
       <head>
         {headNodes}
         <meta charSet="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
         <meta name="theme-color" content="#5B63D9" />
         <meta name="description" content="睡眠時間と日中の体調を記録して、生活の傾向を振り返るアプリ" />
         <meta name="mobile-web-app-capable" content="yes" />

@@ -9,6 +9,7 @@ import { LocalDatePicker, LocalTimePicker } from "@/components/local-date-time-p
 import { useColors } from "@/hooks/use-colors";
 import { createHeadacheEventId, localDateTimeToIso, type HeadacheEventWeatherSnapshot } from "@/lib/headache-events";
 import { useHeadacheEvents } from "@/lib/headache-store";
+import { useSleepData } from "@/lib/sleep-store";
 import { formatAcquiredAt, HEADACHE_FEATURE_OPTIONS, todayKey, type HeadacheFeature } from "@/lib/sleep-utils";
 import { fetchWeatherForCurrentLocation, OPEN_METEO_ATTRIBUTION_URL, WeatherError } from "@/lib/weather-service";
 
@@ -20,25 +21,47 @@ function currentTime() {
 }
 
 export default function HeadacheEventScreen() {
-  const { id } = useLocalSearchParams<{ id?: string }>();
+  const { id, weatherDate } = useLocalSearchParams<{ id?: string; weatherDate?: string }>();
   const { isReady } = useHeadacheEvents();
-  if (!isReady) return <ScreenContainer />;
-  return <HeadacheEventForm key={id ?? "new"} />;
+  const { isReady: sleepReady } = useSleepData();
+  if (!isReady || !sleepReady) return <ScreenContainer />;
+  return <HeadacheEventForm key={`${id ?? "new"}:${weatherDate ?? ""}`} />;
 }
 
 function HeadacheEventForm() {
   const colors = useColors();
-  const { id } = useLocalSearchParams<{ id?: string }>();
+  const { id, weatherDate } = useLocalSearchParams<{ id?: string; weatherDate?: string }>();
   const { events, saveEvent, removeEvent } = useHeadacheEvents();
+  const { records } = useSleepData();
   const existing = useMemo(() => events.find((event) => event.id === id), [events, id]);
+  const inheritedWeather = useMemo(() => {
+    if (existing || !weatherDate) return undefined;
+    const snapshot = records.find((record) => record.date === weatherDate && !record.isSample)?.weather;
+    if (!snapshot) return undefined;
+    return {
+      pressureHpa: snapshot.pressureHpa,
+      temperatureC: snapshot.temperatureC,
+      condition: snapshot.condition,
+      weatherCode: snapshot.weatherCode,
+      observedAt: snapshot.fetchedAt,
+      fetchedAt: snapshot.fetchedAt,
+      source: snapshot.source,
+    } satisfies HeadacheEventWeatherSnapshot;
+  }, [existing, records, weatherDate]);
   const initialStartedAt = existing ? new Date(existing.startedAt) : null;
   const [date, setDate] = useState(existing?.date ?? todayKey());
   const [time, setTime] = useState(initialStartedAt ? `${String(initialStartedAt.getHours()).padStart(2, "0")}:${String(initialStartedAt.getMinutes()).padStart(2, "0")}` : currentTime());
   const [severity, setSeverity] = useState<number | null>(existing?.severity ?? null);
   const [symptoms, setSymptoms] = useState<HeadacheFeature[]>(existing?.symptoms ?? []);
-  const [weather, setWeather] = useState<HeadacheEventWeatherSnapshot | undefined>(existing?.weatherSnapshot);
+  const [weather, setWeather] = useState<HeadacheEventWeatherSnapshot | undefined>(existing?.weatherSnapshot ?? inheritedWeather);
   const [weatherLoading, setWeatherLoading] = useState(false);
-  const [weatherMessage, setWeatherMessage] = useState(existing?.weatherSnapshot ? "保存済みの天候データです。" : "");
+  const [weatherMessage, setWeatherMessage] = useState(
+    existing?.weatherSnapshot
+      ? "保存済みの天候データです。"
+      : inheritedWeather
+        ? "ホームに表示していた保存済み天候を引き継ぎました。観測日時には元データの取得日時を使用しています。"
+        : "",
+  );
   const [isSaving, setIsSaving] = useState(false);
   const [saveFeedback, setSaveFeedback] = useState<{ date: string; startedAt: string } | null>(null);
   const saveLock = useRef(false);

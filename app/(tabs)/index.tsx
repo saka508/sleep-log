@@ -1,229 +1,368 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { router } from "expo-router";
-import { useMemo, type ComponentProps } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
-import Svg, { Circle } from "react-native-svg";
+import { useCallback, useMemo, useState, type ComponentProps } from "react";
+import { Alert, PanResponder, Pressable, ScrollView, StyleSheet, Text, View, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
+import Svg, { Circle, Defs, G, LinearGradient, Path, Rect, Stop } from "react-native-svg";
 
-import { Card, LineChart, MetricCard, PageHeader, PrimaryButton, SectionLabel, SmallStatus } from "@/components/sleep-ui";
+import { AiInsightPanel } from "@/components/ai-insight-panel";
+import { Card } from "@/components/sleep-ui";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
-import { useHeadacheEvents } from "@/lib/headache-store";
+import { buildHomeComparison, type HomeComparisonRow } from "@/lib/home-summary";
 import { useSleepData } from "@/lib/sleep-store";
-import { average, daysFromToday, formatAcquiredAt, formatDate, formatDuration, getSleepStats, todayKey, type SleepRecord } from "@/lib/sleep-utils";
+import { formatAcquiredAt, formatDate, todayKey, type SleepRecord } from "@/lib/sleep-utils";
+
+type MaterialIconName = ComponentProps<typeof MaterialIcons>["name"];
 
 export default function TodayScreen() {
-  const colors = useColors();
+  const colors = useColors("light");
   const { records, isReady } = useSleepData();
-  const { events, isReady: headacheReady } = useHeadacheEvents();
   const today = todayKey();
-  const record = records.find((item) => item.date === today);
-  // Today and the previous six days, on the device's local calendar. Using UTC
-  // here would shift the window by a day for most of the day in JST.
-  const windowStart = daysFromToday(-6);
+  const todayRecord = records.find((item) => item.date === today && !item.isSample);
   const personalRecords = useMemo(() => records.filter((item) => !item.isSample), [records]);
-  const recent = useMemo(() => personalRecords.filter((item) => item.date >= windowStart && item.date <= today), [personalRecords, today, windowStart]);
   const latestWeatherRecord = useMemo(
-    () => personalRecords.filter((item) => item.weather).sort((a, b) => b.weather!.fetchedAt.localeCompare(a.weather!.fetchedAt))[0],
+    () => personalRecords
+      .filter((item) => item.weather)
+      .sort((a, b) => b.weather!.fetchedAt.localeCompare(a.weather!.fetchedAt))[0],
     [personalRecords],
   );
-  const recentHeadacheEvents = useMemo(() => events.filter((item) => item.date >= windowStart && item.date <= today), [events, today, windowStart]);
-  const stats = getSleepStats(recent);
-  const fatigue = recent.map((item) => item.fatigue).filter((value): value is number => value !== undefined);
-  const muscleFatigue = recent.map((item) => item.muscleFatigue).filter((value): value is number => value !== undefined);
-  const missing = record ? [] : ["睡眠時刻", "眠気", "頭の冴え"];
-  const openRecord = () => router.push({ pathname: "/record", params: { date: today } });
+  const comparison = useMemo(() => buildHomeComparison(records, today), [records, today]);
+  const openRecord = useCallback(() => router.push({ pathname: "/record", params: { date: today } }), [today]);
+  const openHeadache = useCallback(() => {
+    router.push({
+      pathname: "/headache-event",
+      params: latestWeatherRecord?.weather ? { weatherDate: latestWeatherRecord.date } : {},
+    });
+  }, [latestWeatherRecord]);
 
-  if (!isReady) {
-    return <ScreenContainer />;
-  }
+  const [swipeControl] = useState(() => {
+    let currentScrollY = 0;
+    let gestureLocked = false;
+    return {
+      panResponder: PanResponder.create({
+        onMoveShouldSetPanResponderCapture: (_event, gesture) => {
+          const vertical = gesture.dy > 12 && Math.abs(gesture.dy) > Math.abs(gesture.dx) * 1.4;
+          return !gestureLocked && currentScrollY <= 2 && gesture.y0 <= 125 && vertical;
+        },
+        onPanResponderRelease: (_event, gesture) => {
+          if (gesture.dy < 68 || gesture.vy < 0.08 || gestureLocked) return;
+          gestureLocked = true;
+          openRecord();
+          setTimeout(() => { gestureLocked = false; }, 900);
+        },
+        onPanResponderTerminate: () => { gestureLocked = false; },
+      }),
+      setScrollY(value: number) {
+        currentScrollY = value;
+      },
+    };
+  });
+
+  const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    swipeControl.setScrollY(event.nativeEvent.contentOffset.y);
+  };
+
+  if (!isReady) return <ScreenContainer />;
 
   return (
-    <ScreenContainer>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <PageHeader
-          title="ダッシュボード"
-          subtitle={formatDate(today)}
-          action={<SmallStatus label={record ? "今日の記録あり" : "今日の記録なし"} tone={record ? "success" : "muted"} />}
-        />
+    <ScreenContainer style={{ backgroundColor: colors.sleepHomeBackground }}>
+      <View style={[styles.homeRoot, { backgroundColor: colors.sleepHomeBackground }]}>
+        <ForestBackdrop />
+        <View pointerEvents="none" style={styles.futureEffectLayer} />
+        <View style={styles.normalUiLayer} {...swipeControl.panResponder.panHandlers}>
+        <ScrollView
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
+          overScrollMode="never"
+        >
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="記録画面を開く"
+            onPress={openRecord}
+            style={({ pressed }) => [styles.swipeHint, { backgroundColor: `${colors.primary}0C` }, pressed && styles.pressed]}
+          >
+            <View style={[styles.swipeHandle, { backgroundColor: colors.primary }]} />
+            <MaterialIcons name="south" size={15} color={colors.primary} />
+            <Text style={[styles.swipeText, { color: colors.primary }]}>上端から下へスワイプして記録</Text>
+          </Pressable>
 
-        <WeatherCard weatherRecord={latestWeatherRecord} onOpenRecord={openRecord} />
+          <HomeHeader date={formatDate(today)} hasTodayRecord={Boolean(todayRecord)} />
 
-        <View style={styles.quickActions}>
-          <View style={styles.quickAction}><PrimaryButton label={record ? "今日の記録を編集" : "睡眠を記録"} icon={record ? "edit" : "add"} onPress={openRecord} /></View>
-          <View style={styles.quickAction}><PrimaryButton label="詳細分析" icon="insights" secondary onPress={() => router.push("/analysis")} /></View>
-        </View>
-
-        <SectionLabel title="最近7日の記録" action={<SmallStatus label={`${recent.length} / 7 日`} tone={recent.length ? "primary" : "muted"} />} />
-        <Card style={styles.overviewCard}>
-          <SummaryRing completed={recent.length} total={7} />
-          <View style={styles.overviewCopy}>
-            <Text style={[styles.overviewTitle, { color: colors.foreground }]}>入力状況</Text>
-            <Text style={[styles.overviewText, { color: colors.muted }]}>{recent.length ? `睡眠記録 ${recent.length} 日分。未記録は ${Math.max(0, 7 - recent.length)} 日分です。` : "個人の記録が増えると、ここに最近の様子を表示します。"}</Text>
-            <Text style={[styles.overviewCaption, { color: colors.muted }]}>サンプル記録は個人向けの集計に含めません。</Text>
+          <View style={styles.topGrid}>
+            <WeatherAction weatherRecord={latestWeatherRecord} onPress={openHeadache} onUpdate={openRecord} />
+            <ComparisonCard rows={comparison.rows} minimumRecords={comparison.minimumRecords} lookbackDays={comparison.lookbackDays} />
           </View>
-        </Card>
 
-        <View style={styles.metrics}>
-          <MetricCard label="平均睡眠" value={recent.length ? formatDuration(stats.averageSleepMinutes, true) : "—"} caption={recent.length ? `記録された ${recent.length} 日の平均` : "データ不足"} icon="bedtime" accent={colors.primary} />
-          <MetricCard label="頭痛イベント" value={headacheReady ? `${recentHeadacheEvents.length} 件` : "—"} caption="直近7日・別記録" icon="healing" accent={colors.error} />
-        </View>
+          <AiInsightPanel
+            onPress={() => Alert.alert("今後追加予定です", "AI相談・提案はまだ外部通信を行いません。本人の記録を安全に扱う設計を確認してから追加します。")}
+          />
 
-        <SectionLabel title="今日の記録" />
-        <Card>
-          {missing.length ? (
-            <View style={styles.missingWrap}>
-              <View style={[styles.missingIcon, { backgroundColor: `${colors.warning}18` }]}>
-                <MaterialIcons name="edit-note" size={22} color={colors.warning} />
-              </View>
-              <View style={styles.missingCopy}>
-                <Text style={[styles.missingTitle, { color: colors.foreground }]}>まだ入力されていません</Text>
-                <Text style={[styles.missingText, { color: colors.muted }]}>{missing.join("・")}を記録すると、分析で傾向を見られます。</Text>
-              </View>
-            </View>
-          ) : (
-            <View style={styles.completeWrap}>
-              <MaterialIcons name="check-circle" size={22} color={colors.success} />
-              <View style={styles.missingCopy}>
-                <Text style={[styles.missingTitle, { color: colors.foreground }]}>今日の記録はそろっています</Text>
-                <Text style={[styles.missingText, { color: colors.muted }]}>気分や予定が変わったら、いつでも編集できます。</Text>
-              </View>
-            </View>
-          )}
-          <View style={styles.buttonSpacer}>
-            <PrimaryButton label={record ? "記録を編集" : "記録を追加"} icon={record ? "edit" : "add"} onPress={openRecord} />
+          <View style={[styles.menuArea, { borderTopColor: colors.sleepHomeBorder, backgroundColor: colors.sleepHomeBackground }]}>
+            <ForestMenuButton onPress={() => router.push("/menu")} />
+            <Text style={[styles.menuCaption, { color: colors.muted }]}>記録・頭痛イベント・履歴・分析・設定</Text>
           </View>
-          <View style={styles.headacheButton}>
-            <PrimaryButton label="頭痛イベントを記録" icon="healing" secondary onPress={() => router.push("/headache-event")} />
+
+          <View style={[styles.disclaimer, { backgroundColor: `${colors.muted}10` }]}>
+            <MaterialIcons name="info-outline" size={16} color={colors.muted} />
+            <Text style={[styles.disclaimerText, { color: colors.muted }]}>表示は本人の記録を振り返るための参考情報であり、診断ではありません。</Text>
           </View>
-        </Card>
-
-        <SectionLabel title="睡眠時間の推移" action={<SmallStatus label={recent.length >= 2 ? "記録済み" : "データ不足"} tone={recent.length >= 2 ? "primary" : "muted"} />} />
-        <Card style={styles.trendCard}>
-          {recent.length >= 2 ? <LineChart records={recent} metric="sleepMinutes" /> : <DashboardEmpty icon="show-chart" text="2日以上の睡眠記録で、ここに推移を表示します。" />}
-          {recent.length ? <Text style={[styles.trendCaption, { color: colors.muted }]}>横軸は実際に記録した日付です。未記録の日を0として表示しません。</Text> : null}
-        </Card>
-
-        <SectionLabel title="日中の記録" />
-        <View style={styles.metrics}>
-          <MetricCard label="眠気" value={recent.length ? `${average(recent.map((item) => item.sleepiness)).toFixed(1)} / 10` : "—"} caption={recent.length ? `${recent.length} 日の記録` : "データ不足"} icon="nightlight-round" accent={colors.warning} />
-          <MetricCard label="頭の冴え" value={recent.length ? `${average(recent.map((item) => item.clarity)).toFixed(1)} / 10` : "—"} caption={recent.length ? `${recent.length} 日の記録` : "データ不足"} icon="psychology" accent={colors.success} />
+        </ScrollView>
         </View>
-        <View style={styles.metrics}>
-          <MetricCard label="疲労" value={fatigue.length ? `${average(fatigue).toFixed(1)} / 10` : "—"} caption={fatigue.length ? `${fatigue.length} 日の記録` : "未入力"} icon="battery-alert" accent={colors.warning} />
-          <MetricCard label="筋肉疲労" value={muscleFatigue.length ? `${average(muscleFatigue).toFixed(1)} / 10` : "—"} caption={muscleFatigue.length ? `${muscleFatigue.length} 日の記録` : "未入力"} icon="fitness-center" accent={colors.error} />
-        </View>
-
-        <Card style={[styles.headacheCard, { borderColor: `${colors.error}38`, backgroundColor: `${colors.error}0D` }]}>
-          <View style={[styles.headacheIcon, { backgroundColor: `${colors.error}18` }]}><MaterialIcons name="healing" size={23} color={colors.error} /></View>
-          <View style={styles.headacheCopy}>
-            <Text style={[styles.headacheTitle, { color: colors.foreground }]}>頭痛が起きたときは、その場で記録</Text>
-            <Text style={[styles.headacheText, { color: colors.muted }]}>時刻・強さ・症状を、天候が取得できないときでも残せます。</Text>
-          </View>
-          <PrimaryButton label="記録" icon="add" secondary onPress={() => router.push("/headache-event")} />
-        </Card>
-
-        <View style={[styles.notice, { backgroundColor: `${colors.muted}12` }]}>
-          <MaterialIcons name="info-outline" size={17} color={colors.muted} />
-          <Text style={[styles.noticeText, { color: colors.muted }]}>Sleep Log は生活記録・傾向把握のためのアプリで、医学的な診断は行いません。</Text>
-        </View>
-      </ScrollView>
+      </View>
     </ScreenContainer>
   );
 }
 
-function WeatherCard({ weatherRecord, onOpenRecord }: { weatherRecord: SleepRecord | undefined; onOpenRecord: () => void }) {
-  const colors = useColors();
-  const weather = weatherRecord?.weather;
+function HomeHeader({ date, hasTodayRecord }: { date: string; hasTodayRecord: boolean }) {
+  const colors = useColors("light");
   return (
-    <Card style={[styles.weatherCard, { backgroundColor: `${colors.primary}0D`, borderColor: `${colors.primary}2B` }]}>
-      <View style={[styles.weatherIcon, { backgroundColor: `${colors.primary}18` }]}><MaterialIcons name="wb-sunny" size={25} color={colors.primary} /></View>
-      <View style={styles.weatherCopy}>
-        <View style={styles.weatherHeading}><Text style={[styles.weatherTitle, { color: colors.foreground }]}>天候・気圧</Text><SmallStatus label={weather ? "保存済み" : "未取得"} tone={weather ? "primary" : "muted"} /></View>
-        {weather ? <>
-          <Text style={[styles.weatherValue, { color: colors.primary }]}>{weather.condition}　{weather.temperatureC}℃　{weather.pressureHpa} hPa</Text>
-          <Text style={[styles.weatherMeta, { color: colors.muted }]}>最終取得: {formatAcquiredAt(weather.fetchedAt)}（{weatherRecord?.date} の記録）</Text>
-        </> : <>
-          <Text style={[styles.weatherValue, { color: colors.foreground }]}>天候データはまだありません</Text>
-          <Text style={[styles.weatherMeta, { color: colors.muted }]}>記録画面で現在地から取得すると、最終取得時刻とともに表示します。</Text>
-        </>}
-        <Text accessibilityRole="button" onPress={onOpenRecord} style={[styles.weatherLink, { color: colors.primary }]}>{weather ? "記録画面で天候を更新" : "記録画面で天候を取得"}</Text>
+    <View style={styles.homeHeader}>
+      <View>
+        <Text style={[styles.homeTitle, { color: colors.sleepHomeForeground }]}>Sleep Log</Text>
+        <Text style={[styles.homeDate, { color: colors.sleepHomeMuted }]}>{date}</Text>
       </View>
+      <View style={[styles.recordStatus, { backgroundColor: hasTodayRecord ? `${colors.sleepForest}16` : `${colors.sleepHomeMuted}12` }]}>
+        <MaterialIcons name="calendar-today" size={14} color={hasTodayRecord ? colors.sleepForest : colors.sleepHomeMuted} />
+        <Text style={[styles.recordStatusText, { color: hasTodayRecord ? colors.sleepForest : colors.sleepHomeMuted }]}>{hasTodayRecord ? "今日の記録あり" : "今日の記録なし"}</Text>
+      </View>
+    </View>
+  );
+}
+
+function ForestBackdrop() {
+  const colors = useColors("light");
+  return (
+    <View pointerEvents="none" style={styles.forestBackdrop}>
+      <Svg width="100%" height="100%" viewBox="0 0 390 900" preserveAspectRatio="xMidYMin slice">
+        <Defs>
+          <LinearGradient id="homeMist" x1="0" y1="0" x2="0" y2="1">
+            <Stop offset="0" stopColor={colors.sleepSky} stopOpacity={0.16} />
+            <Stop offset="0.48" stopColor={colors.sleepHomeSurface} stopOpacity={0.05} />
+            <Stop offset="1" stopColor={colors.sleepForest} stopOpacity={0.08} />
+          </LinearGradient>
+          <LinearGradient id="homeWater" x1="0" y1="0" x2="0" y2="1">
+            <Stop offset="0" stopColor={colors.sleepSky} stopOpacity={0} />
+            <Stop offset="0.38" stopColor={colors.sleepSky} stopOpacity={0.07} />
+            <Stop offset="1" stopColor={colors.sleepTeal} stopOpacity={0.14} />
+          </LinearGradient>
+        </Defs>
+        <Rect x="0" y="0" width="390" height="900" fill="url(#homeMist)" />
+        <G fill={colors.sleepForest} fillOpacity={0.13}>
+          <Path d="M-2 55 C18 38 37 42 42 61 C25 72 8 70-2 55Z" />
+          <Path d="M22 29 C33 8 53 7 62 24 C51 40 36 44 22 29Z" />
+          <Path d="M58 6 C75-9 94-2 96 16 C80 27 66 24 58 6Z" />
+          <Path d="M-5 119 C12 98 32 103 36 123 C19 134 4 132-5 119Z" />
+          <Path d="M348 16 C358-4 380-4 389 14 C378 31 360 32 348 16Z" />
+          <Path d="M370 49 C386 30 405 38 410 57 C394 68 380 65 370 49Z" />
+          <Path d="M348 91 C363 70 385 76 390 96 C373 109 358 106 348 91Z" />
+          <Path d="M-4 388 C13 368 33 373 38 392 C22 405 6 403-4 388Z" />
+          <Path d="M7 424 C24 406 44 412 48 431 C31 443 16 441 7 424Z" />
+          <Path d="M357 548 C373 528 394 535 398 555 C381 568 366 564 357 548Z" />
+          <Path d="M375 586 C391 568 409 575 414 594 C398 607 383 603 375 586Z" />
+        </G>
+        <Rect x="0" y="570" width="390" height="330" fill="url(#homeWater)" />
+        <Path d="M0 720 L18 684 L34 720 L53 668 L72 720 L92 680 L111 720 L132 657 L154 720 L177 676 L197 720 L219 665 L241 720 L265 681 L285 720 L307 655 L332 720 L354 674 L375 720 L397 663 L416 720 V900 H0 Z" fill={colors.sleepForest} fillOpacity={0.035} />
+        <Path d="M0 790 L22 742 L42 790 L64 722 L86 790 L111 739 L133 790 L157 714 L182 790 L207 742 L230 790 L253 722 L277 790 L305 736 L327 790 L351 709 L378 790 L402 737 L420 790 V900 H0 Z" fill={colors.sleepForest} fillOpacity={0.075} />
+      </Svg>
+    </View>
+  );
+}
+
+function ForestMenuButton({ onPress }: { onPress: () => void }) {
+  const colors = useColors("light");
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="メニューを開く"
+      onPress={onPress}
+      style={({ pressed }) => [styles.forestMenuButton, { backgroundColor: colors.sleepForest }, pressed && styles.pressed]}
+    >
+      <MaterialIcons name="menu" size={23} color={colors.sleepHomeSurface} />
+      <Text style={[styles.forestMenuText, { color: colors.sleepHomeSurface }]}>メニューを開く</Text>
+      <View pointerEvents="none" style={styles.menuLeaf}>
+        <MaterialIcons name="eco" size={31} color={colors.sleepHomeSurface} />
+      </View>
+    </Pressable>
+  );
+}
+
+function WeatherScene() {
+  const colors = useColors("light");
+  return (
+    <View pointerEvents="none" style={styles.weatherScene}>
+      <Svg width="100%" height="100%" viewBox="0 0 160 160">
+        <Defs>
+          <LinearGradient id="weatherSky" x1="0" y1="0" x2="0" y2="1">
+            <Stop offset="0" stopColor={colors.sleepSky} stopOpacity={0.58} />
+            <Stop offset="0.56" stopColor={colors.sleepHomeSurface} stopOpacity={0.36} />
+            <Stop offset="1" stopColor={colors.sleepTeal} stopOpacity={0.38} />
+          </LinearGradient>
+        </Defs>
+        <Circle cx="80" cy="80" r="80" fill="url(#weatherSky)" />
+        <Circle cx="116" cy="40" r="12" fill={colors.sleepHomeSurface} fillOpacity={0.72} />
+        <Path d="M-8 94 L31 58 L63 87 L91 48 L128 91 L170 58 V116 H-8 Z" fill={colors.sleepSky} fillOpacity={0.48} />
+        <Path d="M-5 108 C35 100 67 114 102 105 C126 98 148 105 166 99 V168 H-5 Z" fill={colors.sleepTeal} fillOpacity={0.32} />
+        <Path d="M0 125 L10 103 L20 125 L32 94 L44 125 L57 105 L68 125 L81 90 L94 125 L108 104 L120 125 L135 92 L149 125 L160 102 V166 H0 Z" fill={colors.sleepForest} fillOpacity={0.48} />
+      </Svg>
+    </View>
+  );
+}
+
+function WeatherAction({ weatherRecord, onPress, onUpdate }: { weatherRecord?: SleepRecord; onPress: () => void; onUpdate: () => void }) {
+  const colors = useColors("light");
+  const weather = weatherRecord?.weather;
+  const icon = weatherIcon(weather?.weatherCode);
+  const label = weather
+    ? `${weather.condition}、${weather.temperatureC}度、${weather.pressureHpa}ヘクトパスカル。タップして頭痛イベントを記録`
+    : "天候未取得。タップして頭痛イベントを記録";
+
+  return (
+    <View style={styles.weatherColumn}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        onPress={onPress}
+        style={({ pressed }) => [
+          styles.weatherCircle,
+          { backgroundColor: colors.sleepHomeSurface, borderColor: `${colors.sleepSky}88` },
+          pressed && styles.pressed,
+        ]}
+      >
+        <WeatherScene />
+        <View style={styles.weatherContent}>
+        <MaterialIcons name={icon} size={31} color={weather ? colors.sleepBlue : colors.sleepHomeMuted} />
+        {weather ? (
+          <>
+            <Text style={[styles.weatherCondition, { color: colors.sleepHomeForeground }]}>{weather.condition}</Text>
+            <Text style={[styles.temperature, { color: colors.sleepHomeForeground }]}>{weather.temperatureC}℃</Text>
+            <Text style={[styles.pressure, { color: colors.sleepHomeMuted }]}>{weather.pressureHpa} hPa</Text>
+            <View style={[styles.headacheCue, { backgroundColor: `${colors.sleepHeadache}16` }]}>
+              <MaterialIcons name="healing" size={13} color={colors.sleepHeadache} />
+              <Text style={[styles.headacheCueText, { color: colors.sleepHeadache }]}>頭痛を記録</Text>
+            </View>
+          </>
+        ) : (
+          <>
+            <Text style={[styles.temperature, { color: colors.sleepHomeForeground }]}>--</Text>
+            <Text style={[styles.pressure, { color: colors.sleepHomeMuted }]}>天候未取得</Text>
+            <View style={[styles.headacheCue, { backgroundColor: `${colors.sleepHeadache}16` }]}>
+              <MaterialIcons name="healing" size={13} color={colors.sleepHeadache} />
+              <Text style={[styles.headacheCueText, { color: colors.sleepHeadache }]}>頭痛を記録</Text>
+            </View>
+          </>
+        )}
+        </View>
+      </Pressable>
+      <Text style={[styles.weatherTime, { color: colors.sleepHomeMuted }]}>
+        {weather ? `取得 ${formatAcquiredAt(weather.fetchedAt)}` : "保存済み天候なし"}
+      </Text>
+      <Pressable accessibilityRole="button" onPress={onUpdate} style={({ pressed }) => [styles.updateButton, pressed && styles.pressed]}>
+        <MaterialIcons name="refresh" size={15} color={colors.sleepBlue} />
+        <Text style={[styles.updateText, { color: colors.sleepBlue }]}>{weather ? "天候を更新" : "天候を取得"}</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+function ComparisonCard({ rows, minimumRecords, lookbackDays }: { rows: HomeComparisonRow[]; minimumRecords: number; lookbackDays: number }) {
+  const colors = useColors("light");
+  return (
+    <Card style={[styles.comparisonCard, { backgroundColor: colors.sleepHomeSurface, borderColor: colors.sleepHomeBorder }]}>
+      <View style={styles.comparisonHeading}>
+        <MaterialIcons name="bar-chart" size={19} color={colors.sleepTeal} />
+        <Text style={[styles.comparisonTitle, { color: colors.sleepHomeForeground }]}>本人の記録と比較</Text>
+        <MaterialIcons name="info-outline" size={15} color={colors.sleepHomeMuted} />
+      </View>
+      <View style={[styles.tableHeader, { backgroundColor: `${colors.sleepTeal}10`, borderBottomColor: colors.sleepHomeBorder }]}>
+        <Text style={[styles.metricColumn, styles.tableHeaderText, { color: colors.sleepHomeMuted }]}>項目</Text>
+        <Text style={[styles.valueColumn, styles.tableHeaderText, { color: colors.sleepHomeMuted }]}>いつもの目安</Text>
+        <Text style={[styles.valueColumn, styles.tableHeaderText, { color: colors.sleepHomeMuted }]}>今日</Text>
+      </View>
+      {rows.map((row) => (
+        <View key={row.key} style={[styles.tableRow, { borderBottomColor: colors.sleepHomeBorder }]}>
+          <View style={styles.metricColumn}>
+            <MaterialIcons name={comparisonIcon(row.key)} size={15} color={comparisonAccent(row.key, colors)} />
+            <Text style={[styles.metricLabel, { color: colors.sleepHomeForeground }]}>{row.label}</Text>
+          </View>
+          <Text style={[styles.valueColumn, styles.metricValue, { color: row.usual === "データ不足" || !row.supported ? colors.sleepHomeMuted : colors.sleepBlue }]}>{row.usual}</Text>
+          <Text style={[styles.valueColumn, styles.metricValue, { color: row.today === "未記録" || row.today === "記録なし" || !row.supported ? colors.sleepHomeMuted : colors.sleepHomeForeground }]}>{row.today}</Text>
+        </View>
+      ))}
+      <Text style={[styles.comparisonMeta, { color: colors.sleepHomeMuted }]}>過去{lookbackDays}日（今日・サンプル除外）の中央値。各項目{minimumRecords}件以上で表示。</Text>
     </Card>
   );
 }
 
-function SummaryRing({ completed, total }: { completed: number; total: number }) {
-  const colors = useColors();
-  const size = 78;
-  const stroke = 8;
-  const radius = (size - stroke) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const progress = Math.max(0, Math.min(1, completed / total));
-  return <View accessibilityLabel={`最近7日の睡眠記録は ${completed} 日です`} style={styles.ring}>
-    <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-      <Circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke={`${colors.primary}16`} strokeWidth={stroke} />
-      <Circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke={colors.primary} strokeWidth={stroke} strokeLinecap="round" strokeDasharray={`${circumference} ${circumference}`} strokeDashoffset={circumference * (1 - progress)} rotation="-90" origin={`${size / 2}, ${size / 2}`} />
-    </Svg>
-    <View style={styles.ringText}><Text style={[styles.ringNumber, { color: colors.foreground }]}>{completed}</Text><Text style={[styles.ringLabel, { color: colors.muted }]}>/ {total}日</Text></View>
-  </View>;
+function comparisonIcon(key: HomeComparisonRow["key"]): MaterialIconName {
+  if (key === "sleep") return "bedtime";
+  if (key === "fatigue") return "battery-alert";
+  if (key === "exercise") return "directions-run";
+  return "favorite";
 }
 
-function DashboardEmpty({ icon, text }: { icon: ComponentProps<typeof MaterialIcons>["name"]; text: string }) {
-  const colors = useColors();
-  return <View style={styles.emptyTrend}><MaterialIcons name={icon} size={25} color={colors.muted} /><Text style={[styles.emptyTrendText, { color: colors.muted }]}>{text}</Text></View>;
+function comparisonAccent(key: HomeComparisonRow["key"], colors: ReturnType<typeof useColors>) {
+  if (key === "sleep") return colors.sleepBlue;
+  if (key === "fatigue") return colors.sleepForest;
+  if (key === "exercise") return colors.sleepForest;
+  return colors.sleepTeal;
+}
+
+function weatherIcon(code?: number): MaterialIconName {
+  if (code === undefined) return "cloud-off";
+  if (code === 0) return "wb-sunny";
+  if (code <= 3) return "cloud";
+  if (code >= 95) return "thunderstorm";
+  if (code >= 71 && code <= 86) return "ac-unit";
+  if (code >= 51 && code <= 67) return "grain";
+  return "water-drop";
 }
 
 const styles = StyleSheet.create({
-  content: { paddingHorizontal: 14, paddingTop: 10, paddingBottom: 24, gap: 11 },
-  weatherCard: { flexDirection: "row", alignItems: "flex-start", gap: 11, padding: 14 },
-  weatherIcon: { width: 44, height: 44, borderRadius: 15, alignItems: "center", justifyContent: "center" },
-  weatherCopy: { flex: 1, minWidth: 0, gap: 3 },
-  weatherHeading: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
-  weatherTitle: { fontSize: 15, lineHeight: 21, fontWeight: "900" },
-  weatherValue: { fontSize: 15, lineHeight: 21, fontWeight: "800" },
-  weatherMeta: { fontSize: 11, lineHeight: 16 },
-  weatherLink: { alignSelf: "flex-start", fontSize: 12, lineHeight: 18, fontWeight: "800", paddingVertical: 3 },
-  quickActions: { flexDirection: "row", gap: 9 },
-  quickAction: { flex: 1, minWidth: 0 },
-  overviewCard: { flexDirection: "row", alignItems: "center", gap: 14, paddingVertical: 14 },
-  ring: { width: 78, height: 78, alignItems: "center", justifyContent: "center" },
-  ringText: { position: "absolute", alignItems: "center", justifyContent: "center" },
-  ringNumber: { fontSize: 20, lineHeight: 23, fontWeight: "900" },
-  ringLabel: { fontSize: 10, lineHeight: 13, fontWeight: "800" },
-  overviewCopy: { flex: 1, gap: 3 },
-  overviewTitle: { fontSize: 16, lineHeight: 22, fontWeight: "900" },
-  overviewText: { fontSize: 13, lineHeight: 19 },
-  overviewCaption: { fontSize: 11, lineHeight: 16 },
-  heroCard: { padding: 16, gap: 12, shadowColor: "#5B63D9", shadowOpacity: 0.16, shadowRadius: 18, elevation: 4 },
-  heroTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
-  heroEyebrow: { color: "#EDEEFF", fontSize: 14, lineHeight: 20, fontWeight: "800" },
-  heroValue: { color: "#FFFFFF", fontSize: 32, lineHeight: 39, fontWeight: "900", letterSpacing: -1, marginTop: 4 },
-  heroCaption: { color: "#EDEEFF", fontSize: 13, lineHeight: 19, marginTop: 3 },
-  heroIcon: { width: 48, height: 48, borderRadius: 17, alignItems: "center", justifyContent: "center", backgroundColor: "#FFFFFF24" },
-  heroDivider: { height: 1, backgroundColor: "#FFFFFF2C" },
-  heroBottom: { flexDirection: "row" },
-  heroBottomText: { color: "#F4F4FF", fontSize: 13, lineHeight: 19, fontWeight: "600" },
-  metrics: { flexDirection: "row", gap: 9 },
-  missingWrap: { flexDirection: "row", alignItems: "center", gap: 12 },
-  completeWrap: { flexDirection: "row", alignItems: "center", gap: 12 },
-  missingIcon: { width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center" },
-  missingCopy: { flex: 1, gap: 3 },
-  missingTitle: { fontSize: 15, lineHeight: 21, fontWeight: "800" },
-  missingText: { fontSize: 13, lineHeight: 19 },
-  buttonSpacer: { marginTop: 12 },
-  headacheButton: { marginTop: 9 },
-  insightCard: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
-  insightIcon: { width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center" },
-  insightValue: { fontSize: 20, lineHeight: 27, fontWeight: "900", marginTop: 2 },
-  trendCard: { paddingVertical: 14, gap: 7 },
-  trendCaption: { fontSize: 11, lineHeight: 16 },
-  emptyTrend: { minHeight: 132, alignItems: "center", justifyContent: "center", gap: 8, padding: 16 },
-  emptyTrendText: { fontSize: 13, lineHeight: 19, textAlign: "center", maxWidth: 250 },
-  headacheCard: { flexDirection: "row", alignItems: "center", gap: 10, padding: 13 },
-  headacheIcon: { width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center" },
-  headacheCopy: { flex: 1, minWidth: 0, gap: 2 },
-  headacheTitle: { fontSize: 14, lineHeight: 20, fontWeight: "900" },
-  headacheText: { fontSize: 11, lineHeight: 16 },
-  notice: { flexDirection: "row", gap: 8, padding: 13, borderRadius: 14, alignItems: "flex-start" },
-  noticeText: { flex: 1, fontSize: 12, lineHeight: 18 },
+  homeRoot: { flex: 1 },
+  forestBackdrop: { ...StyleSheet.absoluteFill },
+  futureEffectLayer: { ...StyleSheet.absoluteFill },
+  normalUiLayer: { flex: 1 },
+  content: { width: "100%", maxWidth: 460, minHeight: "100%", alignSelf: "center", paddingHorizontal: 12, paddingTop: 4, paddingBottom: 12, gap: 13 },
+  pressed: { opacity: 0.75, transform: [{ scale: 0.98 }] },
+  swipeHint: { minHeight: 34, marginHorizontal: 42, borderRadius: 999, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, paddingHorizontal: 10 },
+  swipeHandle: { position: "absolute", top: 4, width: 40, height: 3, borderRadius: 99 },
+  swipeText: { fontSize: 10, lineHeight: 14, fontWeight: "800", marginTop: 4 },
+  homeHeader: { minHeight: 62, flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 10, paddingHorizontal: 2 },
+  homeTitle: { fontSize: 28, lineHeight: 34, fontWeight: "900", letterSpacing: -0.7 },
+  homeDate: { fontSize: 14, lineHeight: 21, fontWeight: "700" },
+  recordStatus: { minHeight: 34, borderRadius: 999, paddingHorizontal: 10, flexDirection: "row", alignItems: "center", gap: 5, marginTop: 5 },
+  recordStatusText: { fontSize: 10, lineHeight: 14, fontWeight: "900" },
+  topGrid: { flexDirection: "row", alignItems: "flex-start", gap: 9 },
+  weatherColumn: { flex: 0.39, minWidth: 0, alignItems: "center", gap: 5 },
+  weatherCircle: { width: "100%", maxWidth: 150, aspectRatio: 1, borderRadius: 999, borderWidth: 1.5, alignItems: "center", justifyContent: "center", padding: 9, overflow: "hidden" },
+  weatherScene: { ...StyleSheet.absoluteFill },
+  weatherContent: { minWidth: "84%", alignItems: "center", borderRadius: 18, paddingHorizontal: 6, paddingVertical: 5 },
+  weatherCondition: { fontSize: 9, lineHeight: 12, fontWeight: "800", textAlign: "center" },
+  temperature: { fontSize: 21, lineHeight: 25, fontWeight: "900", letterSpacing: -0.5 },
+  pressure: { fontSize: 12, lineHeight: 17, fontWeight: "800" },
+  headacheCue: { marginTop: 5, minHeight: 24, borderRadius: 999, flexDirection: "row", alignItems: "center", gap: 3, paddingHorizontal: 7 },
+  headacheCueText: { fontSize: 9, lineHeight: 12, fontWeight: "900" },
+  weatherTime: { fontSize: 9, lineHeight: 13, textAlign: "center" },
+  updateButton: { minHeight: 34, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, paddingHorizontal: 8 },
+  updateText: { fontSize: 11, lineHeight: 16, fontWeight: "800" },
+  comparisonCard: { flex: 0.61, minWidth: 0, padding: 10, gap: 0, borderRadius: 18 },
+  comparisonHeading: { flexDirection: "row", alignItems: "center", gap: 5, marginBottom: 5 },
+  comparisonTitle: { flex: 1, fontSize: 13, lineHeight: 18, fontWeight: "900" },
+  tableHeader: { minHeight: 26, flexDirection: "row", alignItems: "center", borderBottomWidth: 1, borderRadius: 8, paddingHorizontal: 2 },
+  tableHeaderText: { fontSize: 8, lineHeight: 11, fontWeight: "800", textAlign: "center" },
+  tableRow: { minHeight: 39, flexDirection: "row", alignItems: "center", borderBottomWidth: StyleSheet.hairlineWidth },
+  metricColumn: { width: "31%", flexDirection: "row", alignItems: "center", gap: 3, minWidth: 0 },
+  valueColumn: { width: "34.5%", paddingHorizontal: 2, textAlign: "center" },
+  metricLabel: { fontSize: 10, lineHeight: 14, fontWeight: "800" },
+  metricValue: { fontSize: 9, lineHeight: 13, fontWeight: "800" },
+  comparisonMeta: { fontSize: 8, lineHeight: 12, marginTop: 6 },
+  menuArea: { marginHorizontal: -12, paddingHorizontal: 12, paddingTop: 13, borderTopWidth: 1, gap: 5 },
+  menuCaption: { textAlign: "center", fontSize: 10, lineHeight: 15 },
+  forestMenuButton: { minHeight: 54, borderRadius: 16, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 9, overflow: "hidden" },
+  forestMenuText: { fontSize: 17, lineHeight: 22, fontWeight: "900" },
+  menuLeaf: { position: "absolute", right: 15, opacity: 0.15, transform: [{ rotate: "-18deg" }] },
+  disclaimer: { flexDirection: "row", alignItems: "flex-start", gap: 7, borderRadius: 13, padding: 11 },
+  disclaimerText: { flex: 1, fontSize: 11, lineHeight: 17 },
 });

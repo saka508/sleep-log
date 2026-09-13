@@ -111,6 +111,8 @@ export default function RootLayout() {
           {/* If a screen needs the native header, explicitly enable it and set a human title via Stack.Screen options. */}
           <Stack screenOptions={{ headerShown: false }}>
             <Stack.Screen name="(tabs)" />
+            <Stack.Screen name="record" options={{ animation: "slide_from_bottom" }} />
+            <Stack.Screen name="menu" options={{ animation: "slide_from_bottom" }} />
           </Stack>
           <ThemedStatusBar />
         </HeadacheEventProvider>
