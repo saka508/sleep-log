@@ -130,7 +130,17 @@ function HeadacheEventForm() {
 
   const confirmDelete = () => existing && Alert.alert("この頭痛イベントを削除しますか？", "削除したイベントは元に戻せません。", [
     { text: "キャンセル", style: "cancel" },
-    { text: "削除", style: "destructive", onPress: () => { removeEvent(existing.id); router.replace("/headache"); } },
+    {
+      text: "削除",
+      style: "destructive",
+      onPress: () => { void (async () => {
+        if (!await removeEvent(existing.id)) {
+          Alert.alert("削除に失敗しました", "頭痛イベントはこの端末に残っています。時間をおいてもう一度お試しください。");
+          return;
+        }
+        Alert.alert("削除しました", "頭痛イベントを端末から削除しました。", [{ text: "頭痛一覧へ戻る", onPress: () => router.replace("/headache") }]);
+      })(); },
+    },
   ]);
 
   return (
