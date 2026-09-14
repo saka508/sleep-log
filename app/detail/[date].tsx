@@ -18,7 +18,17 @@ export default function RecordDetailScreen() {
   const remove = () => {
     Alert.alert("この記録を削除しますか？", "削除した記録は元に戻せません。", [
       { text: "キャンセル", style: "cancel" },
-      { text: "削除", style: "destructive", onPress: () => { removeRecord(date); router.replace("/history"); } },
+      {
+        text: "削除",
+        style: "destructive",
+        onPress: () => { void (async () => {
+          if (!await removeRecord(date)) {
+            Alert.alert("削除に失敗しました", "記録はこの端末に残っています。時間をおいてもう一度お試しください。");
+            return;
+          }
+          Alert.alert("削除しました", "記録を端末から削除しました。", [{ text: "履歴へ戻る", onPress: () => router.replace("/history") }]);
+        })(); },
+      },
     ]);
   };
 

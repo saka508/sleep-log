@@ -40,7 +40,9 @@ export default function SettingsScreen() {
       await saveReminder(true);
       return;
     }
-    updateSettings({ reminderTime });
+    if (!await updateSettings({ reminderTime })) {
+      Alert.alert("設定を保存できませんでした", "入力内容はこの画面に残っています。時間をおいてもう一度お試しください。");
+    }
   };
 
   const saveReminder = async (enabled: boolean) => {
@@ -61,7 +63,10 @@ export default function SettingsScreen() {
       Alert.alert("Expo Goでは通知を使えません", "記録・履歴・分析はそのまま使えます。通知を使う場合は、EASなどで開発ビルドを作成してください。");
       return;
     }
-    updateSettings({ reminderEnabled: enabled, reminderTime });
+    if (!await updateSettings({ reminderEnabled: enabled, reminderTime })) {
+      Alert.alert("通知設定を保存できませんでした", "端末の通知設定が変更されている可能性があります。時間をおいてもう一度お試しください。");
+      return;
+    }
     if (result === "web" && enabled) Alert.alert("Web版では通知は利用できません", "スマートフォン版でリマインダーを設定できます。");
   };
 
@@ -88,12 +93,18 @@ export default function SettingsScreen() {
       }
       Alert.alert("CSVを読み込みますか？", `${parsed.length}件の記録を日付ごとに追加または更新します。`, [
         { text: "キャンセル", style: "cancel" },
-        { text: "読み込む", onPress: () => { const count = importRecords(parsed); Alert.alert("読み込みました", `${count}件の記録を追加・更新しました。`); } },
+        { text: "読み込む", onPress: () => { void commitRecordImport(parsed); } },
       ]);
     } catch {
       Alert.alert("インポートできませんでした", "CSVファイルの形式を確認してください。");
     } finally {
       setBusy(false);
+    }
+  };
+
+  const saveThemePreference = async (next: ThemePreference) => {
+    if (!await setPreference(next)) {
+      Alert.alert("テーマを保存できませんでした", "現在の表示は変更していません。時間をおいてもう一度お試しください。");
     }
   };
 
@@ -120,7 +131,7 @@ export default function SettingsScreen() {
       }
       Alert.alert("頭痛イベントを復元しますか？", `${parsed.length}件をIDごとに追加または更新します。既存の日次頭痛は変更しません。`, [
         { text: "キャンセル", style: "cancel" },
-        { text: "復元する", onPress: () => { const count = importHeadacheEvents(parsed); Alert.alert("復元しました", `${count}件の頭痛イベントを追加・更新しました。`); } },
+        { text: "復元する", onPress: () => { void commitHeadacheImport(parsed); } },
       ]);
     } catch {
       Alert.alert("復元できませんでした", "頭痛イベントJSONの形式を確認してください。");
@@ -129,13 +140,55 @@ export default function SettingsScreen() {
     }
   };
 
+  const commitRecordImport = async (parsed: typeof records) => {
+    setBusy(true);
+    try {
+      const count = await importRecords(parsed);
+      if (count === null) {
+        Alert.alert("インポートに失敗しました", "既存の記録は変更していません。時間をおいてもう一度お試しください。");
+        return;
+      }
+      Alert.alert("読み込みました", `${count}件の記録を追加・更新しました。`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const commitHeadacheImport = async (parsed: typeof headacheEvents) => {
+    setBusy(true);
+    try {
+      const count = await importHeadacheEvents(parsed);
+      if (count === null) {
+        Alert.alert("復元に失敗しました", "既存の頭痛イベントは変更していません。時間をおいてもう一度お試しください。");
+        return;
+      }
+      Alert.alert("復元しました", `${count}件の頭痛イベントを追加・更新しました。`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const commitRecordAction = async (action: () => Promise<boolean>, successTitle: string, successMessage: string) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      if (!await action()) {
+        Alert.alert("保存に失敗しました", "既存の記録は変更していません。時間をおいてもう一度お試しください。");
+        return;
+      }
+      Alert.alert(successTitle, successMessage);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const confirmRemoveSamples = () => Alert.alert("サンプルデータを削除しますか？", "自分で入力した記録は残ります。", [
     { text: "キャンセル", style: "cancel" },
-    { text: "削除", style: "destructive", onPress: removeSampleRecords },
+    { text: "削除", style: "destructive", onPress: () => { void commitRecordAction(removeSampleRecords, "削除しました", "サンプルデータを端末から削除しました。"); } },
   ]);
   const confirmClear = () => Alert.alert("睡眠・日次記録をすべて削除しますか？", "頭痛イベントは削除されません。この操作は元に戻せないため、先にCSVへ書き出すことをおすすめします。", [
     { text: "キャンセル", style: "cancel" },
-    { text: "睡眠・日次記録を削除", style: "destructive", onPress: clearAllRecords },
+    { text: "睡眠・日次記録を削除", style: "destructive", onPress: () => { void commitRecordAction(clearAllRecords, "削除しました", "睡眠・日次記録を端末から削除しました。頭痛イベントは残っています。"); } },
   ]);
 
   if (!isReady || !headacheEventsReady) return <ScreenContainer />;
@@ -158,7 +211,7 @@ export default function SettingsScreen() {
         <SectionLabel title="表示" />
         <Card style={styles.formCard}>
           <View style={styles.themeRow}><View style={styles.timeCopy}><Text style={[styles.timeLabel, { color: colors.foreground }]}>テーマ</Text><Text style={[styles.timeHint, { color: colors.muted }]}>目にやさしい表示を選べます</Text></View><MaterialIcons name={colorScheme === "dark" ? "dark-mode" : "light-mode"} size={22} color={colors.primary} /></View>
-          <ChoicePills<ThemePreference> value={preference} onChange={setPreference} options={[{ value: "system", label: "自動", icon: "brightness-auto" }, { value: "light", label: "ライト", icon: "light-mode" }, { value: "dark", label: "ダーク", icon: "dark-mode" }]} />
+          <ChoicePills<ThemePreference> value={preference} onChange={(next) => { void saveThemePreference(next); }} options={[{ value: "system", label: "自動", icon: "brightness-auto" }, { value: "light", label: "ライト", icon: "light-mode" }, { value: "dark", label: "ダーク", icon: "dark-mode" }]} />
         </Card>
 
         <SectionLabel title="データ" />
@@ -176,13 +229,13 @@ export default function SettingsScreen() {
         <SectionLabel title="サンプルデータ" />
         <Card style={styles.formCard}>
           <Text style={[styles.sampleText, { color: colors.muted }]}>グラフの見え方を確認できるサンプルが {records.filter((record) => record.isSample).length} 件あります。自分の記録と区別して表示されます。</Text>
-          {hasSamples ? <PrimaryButton label="サンプルを全削除" icon="delete-outline" secondary onPress={confirmRemoveSamples} /> : <PrimaryButton label="サンプルを追加" icon="add" secondary onPress={addSampleRecords} />}
+          {hasSamples ? <PrimaryButton label="サンプルを全削除" icon="delete-outline" secondary disabled={busy} onPress={confirmRemoveSamples} /> : <PrimaryButton label={busy ? "処理中…" : "サンプルを追加"} icon="add" secondary disabled={busy} onPress={() => { void commitRecordAction(addSampleRecords, "追加しました", "サンプルデータを端末に追加しました。"); }} />}
         </Card>
 
         <SectionLabel title="危険な操作" />
         <Card style={[styles.dangerCard, { borderColor: `${colors.error}4D` }]}>
           <View style={styles.dataIntro}><View style={[styles.dataIcon, { backgroundColor: `${colors.error}16` }]}><MaterialIcons name="delete-forever" size={21} color={colors.error} /></View><View style={styles.timeCopy}><Text style={[styles.timeLabel, { color: colors.foreground }]}>睡眠・日次記録をすべて削除</Text><Text style={[styles.timeHint, { color: colors.muted }]}>頭痛イベントは削除されません。先にCSVへ書き出しておくと安心です。</Text></View></View>
-          <PrimaryButton label="睡眠・日次記録を全削除" icon="delete-forever" secondary onPress={confirmClear} />
+          <PrimaryButton label={busy ? "処理中…" : "睡眠・日次記録を全削除"} icon="delete-forever" secondary disabled={busy} onPress={confirmClear} />
         </Card>
 
         <View style={[styles.disclaimer, { backgroundColor: `${colors.muted}12` }]}><MaterialIcons name="info-outline" size={17} color={colors.muted} /><Text style={[styles.disclaimerText, { color: colors.muted }]}>Sleep Log は生活記録・傾向把握のためのアプリです。医学的な診断や治療の判断には使用しません。</Text></View>

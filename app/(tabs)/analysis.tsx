@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Alert, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { ConditionTrendChart } from "@/components/condition-trend-chart";
@@ -29,18 +29,45 @@ export default function AnalysisScreen() {
   const [bedTimeOverride, setBedTime] = useState<string | null>(null);
   const [wakeTimeOverride, setWakeTime] = useState<string | null>(null);
   const [sleepMinutesOverride, setSleepMinutes] = useState<string | null>(null);
+  const [isSavingRecommendation, setIsSavingRecommendation] = useState(false);
+  const recommendationSaveLock = useRef(false);
   const bedTime = bedTimeOverride ?? (recommendation.status === "ready" ? settings.recommendationBedTime ?? recommendation.bedTime : "");
   const wakeTime = wakeTimeOverride ?? (recommendation.status === "ready" ? settings.recommendationWakeTime ?? recommendation.wakeTime : "");
   const sleepMinutes = sleepMinutesOverride ?? (recommendation.status === "ready" ? String(settings.recommendationSleepMinutes ?? recommendation.targetSleepMinutes) : "");
 
-  const saveOverrides = () => {
+  const saveOverrides = async () => {
+    if (recommendationSaveLock.current) return;
     const minutes = Number(sleepMinutes);
     if (!isTime(bedTime) || !isTime(wakeTime) || !Number.isFinite(minutes) || minutes < MIN_RECOMMENDATION_SLEEP_MINUTES) {
       Alert.alert("参考値を確認してください", "就寝・起床時刻は HH:MM、睡眠時間は7時間以上で入力してください。");
       return;
     }
-    updateSettings({ recommendationBedTime: bedTime, recommendationWakeTime: wakeTime, recommendationSleepMinutes: Math.round(minutes) });
-    Alert.alert("参考値を保存しました", "いつでもこの画面から変更・無効化できます。");
+    recommendationSaveLock.current = true;
+    setIsSavingRecommendation(true);
+    try {
+      if (!await updateSettings({ recommendationBedTime: bedTime, recommendationWakeTime: wakeTime, recommendationSleepMinutes: Math.round(minutes) })) {
+        Alert.alert("参考値を保存できませんでした", "入力内容はこの画面に残っています。時間をおいてもう一度お試しください。");
+        return;
+      }
+      Alert.alert("参考値を保存しました", "いつでもこの画面から変更・無効化できます。");
+    } finally {
+      recommendationSaveLock.current = false;
+      setIsSavingRecommendation(false);
+    }
+  };
+
+  const toggleRecommendation = () => {
+    if (recommendationSaveLock.current) return;
+    recommendationSaveLock.current = true;
+    void (async () => {
+      try {
+        if (!await updateSettings({ recommendationEnabled: !settings.recommendationEnabled })) {
+          Alert.alert("表示設定を保存できませんでした", "設定は変更していません。時間をおいてもう一度お試しください。");
+        }
+      } finally {
+        recommendationSaveLock.current = false;
+      }
+    })();
   };
 
   if (!isReady) return <ScreenContainer />;
@@ -72,7 +99,7 @@ export default function AnalysisScreen() {
 
         <SectionLabel title="過去の記録から見た参考値" />
         <Card style={styles.recommendationCard}>
-          <ToggleRow icon="auto-awesome" label="参考値を表示" description="いつでも無効にできます" active={settings.recommendationEnabled} onPress={() => updateSettings({ recommendationEnabled: !settings.recommendationEnabled })} />
+          <ToggleRow icon="auto-awesome" label="参考値を表示" description="いつでも無効にできます" active={settings.recommendationEnabled} onPress={toggleRecommendation} />
           {!settings.recommendationEnabled ? <Text style={[styles.note, { color: colors.muted }]}>参考値の表示は無効です。記録や分析結果は削除されません。</Text> : null}
           {settings.recommendationEnabled && recommendation.status === "ready" ? <>
             <Text style={[styles.recommendationTitle, { color: colors.foreground }]}>過去の記録から見た参考値</Text>
@@ -84,7 +111,7 @@ export default function AnalysisScreen() {
               <View style={styles.editField}><Text style={[styles.editLabel, { color: colors.muted }]}>起床</Text><AppTextInput value={wakeTime} onChangeText={setWakeTime} keyboardType="numbers-and-punctuation" maxLength={5} /></View>
               <View style={styles.editField}><Text style={[styles.editLabel, { color: colors.muted }]}>睡眠（分）</Text><AppTextInput value={sleepMinutes} onChangeText={setSleepMinutes} keyboardType="number-pad" /></View>
             </View>
-            <PrimaryButton label="調整した参考値を保存" icon="save" secondary onPress={saveOverrides} />
+            <PrimaryButton label={isSavingRecommendation ? "保存中…" : "調整した参考値を保存"} icon="save" secondary loading={isSavingRecommendation} onPress={() => { void saveOverrides(); }} />
           </> : null}
           {settings.recommendationEnabled && recommendation.status === "insufficient" ? <Text style={[styles.note, { color: colors.muted }]}>参考値は、眠気が低く頭の冴えが高かった日が {recommendation.minimumDays} 日以上で表示します。現在は {recommendation.qualifyingDays} 日です。</Text> : null}
           {settings.recommendationEnabled && recommendation.status === "tooShort" ? <Text style={[styles.note, { color: colors.muted }]}>条件に合う {recommendation.qualifyingDays} 日はありますが、過去の中央値が短すぎるため参考値は表示しません。</Text> : null}

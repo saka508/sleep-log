@@ -76,7 +76,7 @@ export default function ThemeLabScreen() {
                   },
                 ]}
                 onPress={() => {
-                  setPreference(scheme);
+                  void setPreference(scheme);
                   setLastAction(`Applied ${scheme} globally`);
                 }}
               >

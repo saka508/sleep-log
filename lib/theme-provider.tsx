@@ -4,6 +4,7 @@ import { View, useColorScheme as useSystemColorScheme } from "react-native";
 import { colorScheme as nativewindColorScheme, vars } from "nativewind";
 
 import { SchemeColors, type ColorScheme } from "@/constants/theme";
+import { persistValue } from "@/lib/storage-persistence";
 
 const THEME_KEY = "sleep-log.theme";
 
@@ -14,7 +15,7 @@ type ThemeContextValue = {
   /** The scheme actually in effect, after resolving "system". */
   colorScheme: ColorScheme;
   preference: ThemePreference;
-  setPreference: (preference: ThemePreference) => void;
+  setPreference: (preference: ThemePreference) => Promise<boolean>;
 };
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
@@ -56,9 +57,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  const setPreference = useCallback((next: ThemePreference) => {
+  const setPreference = useCallback(async (next: ThemePreference) => {
+    if (!await persistValue(AsyncStorage, THEME_KEY, next)) return false;
     setPreferenceState(next);
-    void AsyncStorage.setItem(THEME_KEY, next);
+    return true;
   }, []);
 
   useEffect(() => {

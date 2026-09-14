@@ -2,6 +2,19 @@ export type AsyncKeyValueStorage = {
   setItem: (key: string, value: string) => Promise<void>;
 };
 
+export async function persistValue(
+  storage: AsyncKeyValueStorage,
+  key: string,
+  value: string,
+): Promise<boolean> {
+  try {
+    await storage.setItem(key, value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Serializes and writes one storage payload without leaking platform errors to
  * the UI. Callers can use the boolean result to keep form data on screen and
@@ -13,8 +26,7 @@ export async function persistJson(
   value: unknown,
 ): Promise<boolean> {
   try {
-    await storage.setItem(key, JSON.stringify(value));
-    return true;
+    return persistValue(storage, key, JSON.stringify(value));
   } catch {
     return false;
   }

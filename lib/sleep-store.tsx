@@ -26,12 +26,12 @@ type SleepDataContextValue = SleepDataState & {
   isReady: boolean;
   dailyConditions: DailyConditionRecord[];
   saveRecord: (record: SleepRecord) => Promise<boolean>;
-  removeRecord: (date: string) => void;
-  importRecords: (records: SleepRecord[]) => number;
-  updateSettings: (settings: Partial<AppSettings>) => void;
-  removeSampleRecords: () => void;
-  addSampleRecords: () => void;
-  clearAllRecords: () => void;
+  removeRecord: (date: string) => Promise<boolean>;
+  importRecords: (records: SleepRecord[]) => Promise<number | null>;
+  updateSettings: (settings: Partial<AppSettings>) => Promise<boolean>;
+  removeSampleRecords: () => Promise<boolean>;
+  addSampleRecords: () => Promise<boolean>;
+  clearAllRecords: () => Promise<boolean>;
 };
 
 const SleepDataContext = createContext<SleepDataContextValue | null>(null);
@@ -99,48 +99,74 @@ export function SleepDataProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const removeRecord = useCallback((date: string) => {
-    setState((current) => ({ ...current, records: current.records.filter((record) => record.date !== date) }));
+    const current = stateRef.current;
+    const nextState: SleepDataState = { ...current, records: current.records.filter((record) => record.date !== date) };
+    return persistJsonAndCommit(AsyncStorage, STORAGE_KEY, nextState, () => {
+      stateRef.current = nextState;
+      setState(nextState);
+    });
   }, []);
 
-  const importRecords = useCallback((incoming: SleepRecord[]) => {
+  const importRecords = useCallback(async (incoming: SleepRecord[]) => {
     const valid = incoming.map(normalizeSleepRecord).filter((record): record is SleepRecord => record !== null);
-    setState((current) => {
-      const byDate = new Map(current.records.map((record) => [record.date, record]));
-      valid.forEach((record) => {
-        const existing = byDate.get(record.date);
-        byDate.set(record.date, {
-          ...record,
-          id: record.date,
-          isSample: false,
-          createdAt: existing?.createdAt ?? record.createdAt,
-          updatedAt: new Date().toISOString(),
-        });
+    const current = stateRef.current;
+    const byDate = new Map(current.records.map((record) => [record.date, record]));
+    valid.forEach((record) => {
+      const existing = byDate.get(record.date);
+      byDate.set(record.date, {
+        ...record,
+        id: record.date,
+        isSample: false,
+        createdAt: existing?.createdAt ?? record.createdAt,
+        updatedAt: new Date().toISOString(),
       });
-      return { ...current, records: sortRecords([...byDate.values()]) };
     });
-    return valid.length;
+    const nextState: SleepDataState = { ...current, records: sortRecords([...byDate.values()]) };
+    const saved = await persistJsonAndCommit(AsyncStorage, STORAGE_KEY, nextState, () => {
+      stateRef.current = nextState;
+      setState(nextState);
+    });
+    return saved ? valid.length : null;
   }, []);
 
   const updateSettings = useCallback((settings: Partial<AppSettings>) => {
-    setState((current) => ({ ...current, settings: { ...current.settings, ...settings } }));
+    const current = stateRef.current;
+    const nextState: SleepDataState = { ...current, settings: { ...current.settings, ...settings } };
+    return persistJsonAndCommit(AsyncStorage, STORAGE_KEY, nextState, () => {
+      stateRef.current = nextState;
+      setState(nextState);
+    });
   }, []);
 
   const removeSampleRecords = useCallback(() => {
-    setState((current) => ({ ...current, records: current.records.filter((record) => !record.isSample) }));
+    const current = stateRef.current;
+    const nextState: SleepDataState = { ...current, records: current.records.filter((record) => !record.isSample) };
+    return persistJsonAndCommit(AsyncStorage, STORAGE_KEY, nextState, () => {
+      stateRef.current = nextState;
+      setState(nextState);
+    });
   }, []);
 
   const addSampleRecords = useCallback(() => {
-    setState((current) => {
-      const byDate = new Map(current.records.map((record) => [record.date, record]));
-      createSampleRecords().forEach((record) => {
-        if (!byDate.has(record.date)) byDate.set(record.date, record);
-      });
-      return { ...current, records: sortRecords([...byDate.values()]) };
+    const current = stateRef.current;
+    const byDate = new Map(current.records.map((record) => [record.date, record]));
+    createSampleRecords().forEach((record) => {
+      if (!byDate.has(record.date)) byDate.set(record.date, record);
+    });
+    const nextState: SleepDataState = { ...current, records: sortRecords([...byDate.values()]) };
+    return persistJsonAndCommit(AsyncStorage, STORAGE_KEY, nextState, () => {
+      stateRef.current = nextState;
+      setState(nextState);
     });
   }, []);
 
   const clearAllRecords = useCallback(() => {
-    setState((current) => ({ ...current, records: [] }));
+    const current = stateRef.current;
+    const nextState: SleepDataState = { ...current, records: [] };
+    return persistJsonAndCommit(AsyncStorage, STORAGE_KEY, nextState, () => {
+      stateRef.current = nextState;
+      setState(nextState);
+    });
   }, []);
 
   const dailyConditions = useMemo(

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { persistJson, persistJsonAndCommit } from "../lib/storage-persistence";
+import { persistJson, persistJsonAndCommit, persistValue } from "../lib/storage-persistence";
 
 describe("persistJson", () => {
   it("waits for a successful AsyncStorage write", async () => {
@@ -54,5 +54,17 @@ describe("persistJson", () => {
     }, "sleep-log.local-data.v1", circular);
 
     expect(result).toBe(false);
+  });
+
+  it("preserves non-JSON storage values such as the theme preference", async () => {
+    let written: string | undefined;
+    const result = await persistValue({
+      setItem: async (_key, value) => {
+        written = value;
+      },
+    }, "sleep-log.theme", "dark");
+
+    expect(result).toBe(true);
+    expect(written).toBe("dark");
   });
 });

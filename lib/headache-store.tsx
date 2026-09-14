@@ -15,8 +15,8 @@ type HeadacheEventContextValue = {
   events: HeadacheEvent[];
   isReady: boolean;
   saveEvent: (event: HeadacheEvent) => Promise<boolean>;
-  removeEvent: (id: string) => void;
-  importEvents: (events: HeadacheEvent[]) => number;
+  removeEvent: (id: string) => Promise<boolean>;
+  importEvents: (events: HeadacheEvent[]) => Promise<number | null>;
 };
 
 const HeadacheEventContext = createContext<HeadacheEventContextValue | null>(null);
@@ -62,13 +62,21 @@ export function HeadacheEventProvider({ children }: { children: React.ReactNode 
   }, []);
 
   const removeEvent = useCallback((id: string) => {
-    setEvents((current) => current.filter((event) => event.id !== id));
+    const nextEvents = eventsRef.current.filter((event) => event.id !== id);
+    return persistJsonAndCommit(AsyncStorage, HEADACHE_EVENTS_STORAGE_KEY, { schemaVersion: 1, events: nextEvents }, () => {
+      eventsRef.current = nextEvents;
+      setEvents(nextEvents);
+    });
   }, []);
 
-  const importEvents = useCallback((incoming: HeadacheEvent[]) => {
+  const importEvents = useCallback(async (incoming: HeadacheEvent[]) => {
     const valid = incoming.map(normalizeHeadacheEvent).filter((event): event is HeadacheEvent => event !== null);
-    setEvents((current) => mergeHeadacheEvents(current, valid));
-    return valid.length;
+    const nextEvents = mergeHeadacheEvents(eventsRef.current, valid);
+    const saved = await persistJsonAndCommit(AsyncStorage, HEADACHE_EVENTS_STORAGE_KEY, { schemaVersion: 1, events: nextEvents }, () => {
+      eventsRef.current = nextEvents;
+      setEvents(nextEvents);
+    });
+    return saved ? valid.length : null;
   }, []);
 
   const value = useMemo(() => ({ events: sortHeadacheEvents(events), isReady, saveEvent, removeEvent, importEvents }), [events, isReady, saveEvent, removeEvent, importEvents]);
