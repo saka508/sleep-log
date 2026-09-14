@@ -1,7 +1,7 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { router } from "expo-router";
-import { useCallback, useMemo, useState, type ComponentProps } from "react";
-import { Alert, PanResponder, Pressable, ScrollView, StyleSheet, Text, View, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
+import { useCallback, useMemo, useRef, useState, type ComponentProps } from "react";
+import { ActivityIndicator, Alert, PanResponder, Pressable, ScrollView, StyleSheet, Text, View, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
 import Svg, { Circle, Defs, G, LinearGradient, Path, Rect, Stop } from "react-native-svg";
 
 import { AiInsightPanel } from "@/components/ai-insight-panel";
@@ -9,8 +9,10 @@ import { Card } from "@/components/sleep-ui";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { buildHomeComparison, type HomeComparisonRow } from "@/lib/home-summary";
+import { homeWeatherStatusMessage, type HomeWeatherStatus } from "@/lib/home-weather";
 import { useSleepData } from "@/lib/sleep-store";
-import { formatAcquiredAt, formatDate, todayKey, type SleepRecord } from "@/lib/sleep-utils";
+import { formatAcquiredAt, formatDate, todayKey, type WeatherSnapshot } from "@/lib/sleep-utils";
+import { fetchWeatherForCurrentLocation, WeatherError, type WeatherErrorCode } from "@/lib/weather-service";
 
 type MaterialIconName = ComponentProps<typeof MaterialIcons>["name"];
 
@@ -27,6 +29,12 @@ export default function TodayScreen() {
     [personalRecords],
   );
   const comparison = useMemo(() => buildHomeComparison(records, today), [records, today]);
+  const [currentWeather, setCurrentWeather] = useState<WeatherSnapshot>();
+  const [weatherStatus, setWeatherStatus] = useState<HomeWeatherStatus>();
+  const [weatherErrorCode, setWeatherErrorCode] = useState<WeatherErrorCode>();
+  const weatherUpdateLock = useRef(false);
+  const displayedWeather = currentWeather ?? latestWeatherRecord?.weather;
+  const displayedWeatherStatus = weatherStatus ?? (displayedWeather ? "cached" : "idle");
   const openRecord = useCallback(() => router.push({ pathname: "/record", params: { date: today } }), [today]);
   const openHeadache = useCallback(() => {
     router.push({
@@ -34,6 +42,29 @@ export default function TodayScreen() {
       params: latestWeatherRecord?.weather ? { weatherDate: latestWeatherRecord.date } : {},
     });
   }, [latestWeatherRecord]);
+  const updateWeather = useCallback(async () => {
+    if (weatherUpdateLock.current) return;
+    weatherUpdateLock.current = true;
+    setWeatherStatus("updating");
+    setWeatherErrorCode(undefined);
+    try {
+      const snapshot = await fetchWeatherForCurrentLocation();
+      setCurrentWeather({
+        pressureHpa: snapshot.pressureHpa,
+        temperatureC: snapshot.temperatureC,
+        condition: snapshot.condition,
+        weatherCode: snapshot.weatherCode,
+        fetchedAt: snapshot.fetchedAt,
+        source: snapshot.source,
+      });
+      setWeatherStatus("fresh");
+    } catch (error) {
+      setWeatherErrorCode(error instanceof WeatherError ? error.code : "network");
+      setWeatherStatus("error");
+    } finally {
+      weatherUpdateLock.current = false;
+    }
+  }, []);
 
   const [swipeControl] = useState(() => {
     let currentScrollY = 0;
@@ -91,7 +122,13 @@ export default function TodayScreen() {
           <HomeHeader date={formatDate(today)} hasTodayRecord={Boolean(todayRecord)} />
 
           <View style={styles.topGrid}>
-            <WeatherAction weatherRecord={latestWeatherRecord} onPress={openHeadache} onUpdate={openRecord} />
+            <WeatherAction
+              weather={displayedWeather}
+              status={displayedWeatherStatus}
+              errorCode={weatherErrorCode}
+              onPress={openHeadache}
+              onUpdate={updateWeather}
+            />
             <ComparisonCard rows={comparison.rows} minimumRecords={comparison.minimumRecords} lookbackDays={comparison.lookbackDays} />
           </View>
 
@@ -210,9 +247,21 @@ function WeatherScene() {
   );
 }
 
-function WeatherAction({ weatherRecord, onPress, onUpdate }: { weatherRecord?: SleepRecord; onPress: () => void; onUpdate: () => void }) {
+function WeatherAction({
+  weather,
+  status,
+  errorCode,
+  onPress,
+  onUpdate,
+}: {
+  weather?: WeatherSnapshot;
+  status: HomeWeatherStatus;
+  errorCode?: WeatherErrorCode;
+  onPress: () => void;
+  onUpdate: () => void;
+}) {
   const colors = useColors("light");
-  const weather = weatherRecord?.weather;
+  const isUpdating = status === "updating";
   const icon = weatherIcon(weather?.weatherCode);
   const label = weather
     ? `${weather.condition}、${weather.temperatureC}度、${weather.pressureHpa}ヘクトパスカル。タップして頭痛イベントを記録`
@@ -258,10 +307,23 @@ function WeatherAction({ weatherRecord, onPress, onUpdate }: { weatherRecord?: S
       <Text style={[styles.weatherTime, { color: colors.sleepHomeMuted }]}>
         {weather ? `取得 ${formatAcquiredAt(weather.fetchedAt)}` : "保存済み天候なし"}
       </Text>
-      <Pressable accessibilityRole="button" onPress={onUpdate} style={({ pressed }) => [styles.updateButton, pressed && styles.pressed]}>
-        <MaterialIcons name="refresh" size={15} color={colors.sleepBlue} />
-        <Text style={[styles.updateText, { color: colors.sleepBlue }]}>{weather ? "天候を更新" : "天候を取得"}</Text>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={isUpdating ? "天候を更新中" : weather ? "天候を更新" : "天候を取得"}
+        accessibilityState={{ busy: isUpdating, disabled: isUpdating }}
+        disabled={isUpdating}
+        onPress={onUpdate}
+        style={({ pressed }) => [styles.updateButton, pressed && !isUpdating && styles.pressed]}
+      >
+        {isUpdating ? <ActivityIndicator size="small" color={colors.sleepBlue} /> : <MaterialIcons name="refresh" size={15} color={colors.sleepBlue} />}
+        <Text style={[styles.updateText, { color: colors.sleepBlue }]}>{isUpdating ? "更新中…" : weather ? "天候を更新" : "天候を取得"}</Text>
       </Pressable>
+      <Text
+        accessibilityLiveRegion="polite"
+        style={[styles.weatherStatus, { color: status === "error" ? colors.sleepHeadache : colors.sleepHomeMuted }]}
+      >
+        {homeWeatherStatusMessage(status, Boolean(weather), errorCode)}
+      </Text>
     </View>
   );
 }
@@ -347,6 +409,7 @@ const styles = StyleSheet.create({
   weatherTime: { fontSize: 9, lineHeight: 13, textAlign: "center" },
   updateButton: { minHeight: 34, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, paddingHorizontal: 8 },
   updateText: { fontSize: 11, lineHeight: 16, fontWeight: "800" },
+  weatherStatus: { minHeight: 25, maxWidth: 145, fontSize: 9, lineHeight: 12, fontWeight: "700", textAlign: "center" },
   comparisonCard: { flex: 0.61, minWidth: 0, padding: 10, gap: 0, borderRadius: 18 },
   comparisonHeading: { flexDirection: "row", alignItems: "center", gap: 5, marginBottom: 5 },
   comparisonTitle: { flex: 1, fontSize: 13, lineHeight: 18, fontWeight: "900" },
