@@ -100,9 +100,9 @@ function HeadacheEventForm() {
     const now = new Date().toISOString();
     saveLock.current = true;
     setIsSaving(true);
-    setTimeout(() => {
+    void (async () => {
       try {
-        const success = saveEvent({
+        const success = await saveEvent({
           schemaVersion: 1,
           id: existing?.id ?? createHeadacheEventId(),
           date,
@@ -125,7 +125,7 @@ function HeadacheEventForm() {
         saveLock.current = false;
         setIsSaving(false);
       }
-    }, 0);
+    })();
   };
 
   const confirmDelete = () => existing && Alert.alert("この頭痛イベントを削除しますか？", "削除したイベントは元に戻せません。", [

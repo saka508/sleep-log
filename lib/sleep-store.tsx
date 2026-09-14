@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   createSampleRecords,
@@ -13,6 +13,7 @@ import {
   dailyConditionsFromSleepRecords,
   type DailyConditionRecord,
 } from "@/lib/condition-model";
+import { persistJson, persistJsonAndCommit } from "@/lib/storage-persistence";
 
 const STORAGE_KEY = "sleep-log.local-data.v1";
 
@@ -24,7 +25,7 @@ type SleepDataState = {
 type SleepDataContextValue = SleepDataState & {
   isReady: boolean;
   dailyConditions: DailyConditionRecord[];
-  saveRecord: (record: SleepRecord) => void;
+  saveRecord: (record: SleepRecord) => Promise<boolean>;
   removeRecord: (date: string) => void;
   importRecords: (records: SleepRecord[]) => number;
   updateSettings: (settings: Partial<AppSettings>) => void;
@@ -43,6 +44,7 @@ const initialState: SleepDataState = {
 export function SleepDataProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<SleepDataState>(initialState);
   const [isReady, setIsReady] = useState(false);
+  const stateRef = useRef(state);
 
   useEffect(() => {
     const load = async () => {
@@ -53,15 +55,21 @@ export function SleepDataProvider({ children }: { children: React.ReactNode }) {
           const records = Array.isArray(parsed.records)
             ? parsed.records.map(normalizeSleepRecord).filter((record): record is SleepRecord => record !== null)
             : [];
-          setState({
+          const nextState = {
             records: sortRecords(records),
             settings: { ...DEFAULT_SETTINGS, ...parsed.settings },
-          });
+          };
+          stateRef.current = nextState;
+          setState(nextState);
         } else {
-          setState({ records: sortRecords(createSampleRecords()), settings: DEFAULT_SETTINGS });
+          const nextState = { records: sortRecords(createSampleRecords()), settings: DEFAULT_SETTINGS };
+          stateRef.current = nextState;
+          setState(nextState);
         }
       } catch {
-        setState({ records: sortRecords(createSampleRecords()), settings: DEFAULT_SETTINGS });
+        const nextState = { records: sortRecords(createSampleRecords()), settings: DEFAULT_SETTINGS };
+        stateRef.current = nextState;
+        setState(nextState);
       } finally {
         setIsReady(true);
       }
@@ -70,18 +78,24 @@ export function SleepDataProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
+    stateRef.current = state;
     if (!isReady) return;
-    void AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    void persistJson(AsyncStorage, STORAGE_KEY, state);
   }, [isReady, state]);
 
-  const saveRecord = useCallback((record: SleepRecord) => {
-    setState((current) => ({
+  const saveRecord = useCallback(async (record: SleepRecord) => {
+    const current = stateRef.current;
+    const nextState: SleepDataState = {
       ...current,
       records: sortRecords([
         { ...record, id: record.date, isSample: false, updatedAt: new Date().toISOString() },
         ...current.records.filter((item) => item.date !== record.date && item.id !== record.id),
       ]),
-    }));
+    };
+    return persistJsonAndCommit(AsyncStorage, STORAGE_KEY, nextState, () => {
+      stateRef.current = nextState;
+      setState(nextState);
+    });
   }, []);
 
   const removeRecord = useCallback((date: string) => {

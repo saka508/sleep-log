@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   HEADACHE_EVENTS_STORAGE_KEY,
@@ -9,11 +9,12 @@ import {
   sortHeadacheEvents,
   type HeadacheEvent,
 } from "./headache-events";
+import { persistJson, persistJsonAndCommit } from "./storage-persistence";
 
 type HeadacheEventContextValue = {
   events: HeadacheEvent[];
   isReady: boolean;
-  saveEvent: (event: HeadacheEvent) => boolean;
+  saveEvent: (event: HeadacheEvent) => Promise<boolean>;
   removeEvent: (id: string) => void;
   importEvents: (events: HeadacheEvent[]) => number;
 };
@@ -23,13 +24,19 @@ const HeadacheEventContext = createContext<HeadacheEventContextValue | null>(nul
 export function HeadacheEventProvider({ children }: { children: React.ReactNode }) {
   const [events, setEvents] = useState<HeadacheEvent[]>([]);
   const [isReady, setIsReady] = useState(false);
+  const eventsRef = useRef(events);
 
   useEffect(() => {
     const load = async () => {
       try {
         const saved = await AsyncStorage.getItem(HEADACHE_EVENTS_STORAGE_KEY);
-        if (saved) setEvents(normalizeHeadacheEventStore(JSON.parse(saved)).events);
+        if (saved) {
+          const nextEvents = normalizeHeadacheEventStore(JSON.parse(saved)).events;
+          eventsRef.current = nextEvents;
+          setEvents(nextEvents);
+        }
       } catch {
+        eventsRef.current = [];
         setEvents([]);
       } finally {
         setIsReady(true);
@@ -39,15 +46,19 @@ export function HeadacheEventProvider({ children }: { children: React.ReactNode 
   }, []);
 
   useEffect(() => {
+    eventsRef.current = events;
     if (!isReady) return;
-    void AsyncStorage.setItem(HEADACHE_EVENTS_STORAGE_KEY, JSON.stringify({ schemaVersion: 1, events }));
+    void persistJson(AsyncStorage, HEADACHE_EVENTS_STORAGE_KEY, { schemaVersion: 1, events });
   }, [events, isReady]);
 
-  const saveEvent = useCallback((event: HeadacheEvent) => {
+  const saveEvent = useCallback(async (event: HeadacheEvent) => {
     const normalized = normalizeHeadacheEvent(event);
     if (!normalized) return false;
-    setEvents((current) => mergeHeadacheEvents(current, [normalized]));
-    return true;
+    const nextEvents = mergeHeadacheEvents(eventsRef.current, [normalized]);
+    return persistJsonAndCommit(AsyncStorage, HEADACHE_EVENTS_STORAGE_KEY, { schemaVersion: 1, events: nextEvents }, () => {
+      eventsRef.current = nextEvents;
+      setEvents(nextEvents);
+    });
   }, []);
 
   const removeEvent = useCallback((id: string) => {

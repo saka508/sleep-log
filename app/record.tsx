@@ -181,31 +181,33 @@ export default function RecordScreen() {
       createdAt: clashing?.createdAt ?? existing?.createdAt ?? now,
       updatedAt: now,
     };
-    const commit = () => {
+    const commit = async () => {
       saveLock.current = true;
       setIsSaving(true);
-      setTimeout(() => {
-        try {
-          saveRecord(next);
-          setSaveFeedback({ date, sleepMinutes: next.sleepMinutes });
-        } catch {
+      try {
+        const saved = await saveRecord(next);
+        if (!saved) {
           Alert.alert("保存に失敗しました", "入力内容はこの画面に残っています。時間をおいてもう一度お試しください。");
-        } finally {
-          saveLock.current = false;
-          setIsSaving(false);
+          return;
         }
-      }, 0);
+        setSaveFeedback({ date, sleepMinutes: next.sleepMinutes });
+      } catch {
+        Alert.alert("保存に失敗しました", "入力内容はこの画面に残っています。時間をおいてもう一度お試しください。");
+      } finally {
+        saveLock.current = false;
+        setIsSaving(false);
+      }
     };
     // Records are keyed by date, so saving onto a date that already has one
     // replaces it. Ask first instead of losing the existing entry silently.
     if (clashing) {
       Alert.alert("その日の記録を上書きしますか？", `${formatDate(date)} には既に記録があります。上書きすると元の内容は戻せません。`, [
         { text: "キャンセル", style: "cancel" },
-        { text: "上書きする", style: "destructive", onPress: commit },
+        { text: "上書きする", style: "destructive", onPress: () => { void commit(); } },
       ]);
       return;
     }
-    commit();
+    void commit();
   };
 
   if (!isReady) return <ScreenContainer />;
