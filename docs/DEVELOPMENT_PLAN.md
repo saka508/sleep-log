@@ -2,8 +2,8 @@
 
 この文書は、Sleep Logで「何を、どの順序と条件で進めるか」を管理するロードマップの正本である。
 
-- 最終確認日時: 2026-09-14 21:24 JST
-- 最終確認コミット: `a5577c31483a915ad8256d37d945ea8dee145fd6`
+- 最終確認日時: 2026-09-14 21:55 JST
+- 最終確認コミット: `1d096561da016cd5af35f4bedb0bf8bec5f5cf2b`
 - 現在ブランチ: `main`
 - `CONFIRMED`: 現在の追跡済みコード、テスト、Git履歴、または明示的なユーザー決定で確認できた事実
 - `INFERRED`: コードや複数資料から合理的に推定できるが、明示的な確認がない内容
@@ -24,7 +24,7 @@
 ## 現在のリポジトリ基準
 
 - `CONFIRMED`: `main`と`origin/main`は最終確認コミットで一致していた。
-- `CONFIRMED`: GitHub Actions run `34842268338`は同コミットで成功した。
+- `CONFIRMED`: GitHub Actions run `34844415352`は同コミットで成功した。
 - `CONFIRMED`: GitHub Pagesの`https://saka508.github.io/sleep-log/`と`sw.js`はHTTP 200で、Service Workerはcache v10だった。
 - `CONFIRMED`: CIはpnpm 9.12.0、Node 22を使い、install、typecheck、lint、test、web export、Pages deployを実行する。
 - `CONFIRMED`: 未追跡ファイルは`AGENTS.md`、`lib/training-presets.ts`、`lib/training-store.tsx`、`pnpm-workspace.yaml`である。所有者と採否が未確定なので変更・削除・コミットしない。
@@ -34,7 +34,7 @@
 
 | Phase | Status | 根拠 | ラベル |
 |---|---|---|---|
-| Phase 1 | `IN PROGRESS` | PWA、Pages、ローカル保存、CSV、保存UI、天候更新は追跡済み。AsyncStorage書き込み失敗をUIへ返す経路と最新コミットのAndroid実機回帰は未確認。 | `CONFIRMED` |
+| Phase 1 | `IN PROGRESS` | PWA、Pages、ローカル保存、CSV、保存UI、天候更新は追跡済み。日次記録・頭痛イベントのフォーム保存は書き込み完了後だけ成功表示する。その他の書き込み操作と最新コミットのAndroid実機回帰は未確認。 | `CONFIRMED` |
 | Phase 2 | `IN PROGRESS` | `DailyConditionRecord schemaVersion: 1`読み取りモデルと旧形式アダプターがある。運動・栄養型はあるが保存モデルは未確定。 | `CONFIRMED` |
 | Phase 3 | `IN PROGRESS` | 睡眠、昼寝、眠気、疲労、筋肉疲労、カフェイン、日次頭痛、独立頭痛イベント、天候を入力可能。運動・栄養入力はない。 | `CONFIRMED` |
 | Phase 4 | `IN PROGRESS` | 日次詳細と森林ホームがあるが、5分野を統合した1日画面ではない。 | `CONFIRMED` |
@@ -51,7 +51,7 @@
 - C-01 `INFERRED`: `lib/condition-model.ts`の運動・栄養型は将来契約のたたき台だが、保存形式として承認済みとは確認できない。
 - C-02 `UNVERIFIED`: 未追跡の`lib/training-presets.ts`と`lib/training-store.tsx`は試作に見えるが、Git履歴、Provider接続、ルート、テストがなく正式実装ではない。
 - C-03 `UNVERIFIED`: 最新コミットを含むAndroid APKでの全回帰、フォント拡大、Reduced Motion、オフライン更新の実機結果はリポジトリだけでは確認できない。
-- C-04 `UNVERIFIED`: AsyncStorageの容量超過・書き込み拒否時に、画面の成功表示が永続化成功と一致する保証はない。現在のstoreは`setItem` Promiseを待たず、拒否をUIへ返していない。
+- C-04 `UNVERIFIED`: 日次記録・頭痛イベントのフォーム保存は、AsyncStorage書き込み成功後にだけ成功表示し、拒否時はフォーム状態をcommitしない。CSV import、削除、設定変更、サンプル操作など、個別の成功表示を持つ他の書き込み操作にも同じ失敗伝播を適用するかは未確認である。
 - C-05 `UNVERIFIED`: 元の「計画フェーズ.pdf」本体は今回の作業環境で確認できず、ユーザーが明示したPhase分類と統合ロードマップv2を照合元にした。
 - C-06 `INFERRED`: `docs/development-standard.md`と`docs/condition-model.md`は履歴資料として残るが、今後の優先順位は本書、仕様は`SPEC.md`、決定理由は`DECISIONS.md`を優先する。
 - C-07 `UNVERIFIED`: 独立頭痛イベントを日次画面へどう併記し、旧日次頭痛との重複をどう避けるかは未決定である。
@@ -65,7 +65,7 @@
 
 ## 次の作業単位
 
-Phase 1の保存耐久性に関する確認待ちを先に閉じる。保存形式を変えず、AsyncStorage書き込み成功・失敗を保存UIが正しく識別できるかを設計・テストし、必要なら最小修正案をユーザーへ提示する。これを確認後、Phase 5.5の重複日付・日付時刻・範囲外値の品質検査へ進む。
+Phase 1のフォーム保存について、AsyncStorage書き込み成功・失敗を保存UIが正しく識別する処理とテストを追加した。次は、C-04の非フォーム書き込み操作を同じ対象に含めるかユーザー確認し、含めない場合はPhase 5.5の重複日付・日付時刻・範囲外値の品質検査へ進む。
 
 ## Phase 1：既存Sleep Logの安定化
 
@@ -74,11 +74,11 @@ Phase 1の保存耐久性に関する確認待ちを先に閉じる。保存形�
 - 目的: 既存記録を失わず、Android、Web/PWA、GitHub Pagesで基本機能を安定動作させる。
 - 依存関係: 既存`SleepRecord`、AsyncStorage、CSV、Expo Router、PWA shell。
 - 現在の確認根拠: `lib/sleep-store.tsx`、`lib/headache-store.tsx`、`lib/csv-core.ts`、`app.config.ts`、`public/sw.js`、workflow、テスト、Git履歴。`CONFIRMED`
-- 完了済み項目: 日次記録の正規化、日付キーによる置換、CSV入出力、頭痛イベントJSON、PWA base path、Service Worker、CI gate、森林ホーム、天候円の更新と頭痛導線分離。
-- 未完了項目: AsyncStorage失敗伝播の保証、最新基準でのAndroid実機・オフライン・復旧試験の記録。
+- 完了済み項目: 日次記録の正規化、日付キーによる置換、CSV入出力、頭痛イベントJSON、PWA base path、Service Worker、CI gate、森林ホーム、天候円の更新と頭痛導線分離。日次記録・頭痛イベントフォームでは、AsyncStorage書き込み完了後だけ成功表示し、書き込み拒否時は入力状態を維持する。
+- 未完了項目: CSV import、削除、設定変更など非フォーム書き込み操作の失敗伝播方針、最新基準でのAndroid実機・オフライン・復旧試験の記録。
 - このPhaseでは実装しないもの: 新データモデルへの全面移行、Health同期、AI予測、運動機能。
 - Definition of Done: 旧データと旧CSVを保持し、保存・読込・編集・削除・バックアップ・PWA更新が失敗経路を含め検証され、重大な既知不具合がない。
-- 必須テスト: 旧レコード読込、壊れたレコード、保存失敗、CSV往復、日跨ぎ、PWA export、オフライン起動、Androidスモーク、CI。
+- 必須テスト: 旧レコード読込、壊れたレコード、フォーム保存失敗、CSV往復、日跨ぎ、PWA export、オフライン起動、Androidスモーク、CI。
 - 次Phaseへの移行条件: 保存失敗時の挙動と復旧方法が確認され、未解決の重大項目が明示されている。
 - 未確認事項・差分: C-03、C-04。
 
