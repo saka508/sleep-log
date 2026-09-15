@@ -1,7 +1,9 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { router, useLocalSearchParams } from "expo-router";
-import { Alert, Linking, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useState } from "react";
+import { Linking, ScrollView, StyleSheet, Text, View } from "react-native";
 
+import { ActionDialog } from "@/components/action-dialog";
 import { Card, EmptyState, IconButton, PageHeader, PrimaryButton, SectionLabel, SmallStatus } from "@/components/sleep-ui";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
@@ -14,22 +16,19 @@ export default function RecordDetailScreen() {
   const { date } = useLocalSearchParams<{ date: string }>();
   const { records, removeRecord, isReady } = useSleepData();
   const record = records.find((item) => item.date === date);
+  const [deleteDialog, setDeleteDialog] = useState<"confirm" | "success" | "error" | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
-  const remove = () => {
-    Alert.alert("この記録を削除しますか？", "削除した記録は元に戻せません。", [
-      { text: "キャンセル", style: "cancel" },
-      {
-        text: "削除",
-        style: "destructive",
-        onPress: () => { void (async () => {
-          if (!await removeRecord(date)) {
-            Alert.alert("削除に失敗しました", "記録はこの端末に残っています。時間をおいてもう一度お試しください。");
-            return;
-          }
-          Alert.alert("削除しました", "記録を端末から削除しました。", [{ text: "履歴へ戻る", onPress: () => router.replace("/history") }]);
-        })(); },
-      },
-    ]);
+  const remove = async () => {
+    if (isDeleting) return;
+    setIsDeleting(true);
+    try {
+      setDeleteDialog(await removeRecord(date) ? "success" : "error");
+    } catch {
+      setDeleteDialog("error");
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   if (!isReady) return <ScreenContainer />;
@@ -50,7 +49,7 @@ export default function RecordDetailScreen() {
         <PageHeader
           title="記録の詳細"
           subtitle={formatDate(record.date)}
-          action={<View style={styles.headerActions}><IconButton icon="edit" label="編集" onPress={() => router.push({ pathname: "/record", params: { date: record.date } })} /><IconButton icon="delete-outline" label="削除" tone="danger" onPress={remove} /></View>}
+          action={<View style={styles.headerActions}><IconButton icon="edit" label="編集" onPress={() => router.push({ pathname: "/record", params: { date: record.date } })} /><IconButton icon="delete-outline" label="削除" tone="danger" onPress={() => setDeleteDialog("confirm")} /></View>}
         />
         <Card style={[styles.hero, { backgroundColor: colors.primary, borderColor: colors.primary }]}>
           <View style={styles.heroTop}>
@@ -103,6 +102,9 @@ export default function RecordDetailScreen() {
         {record.note ? <><SectionLabel title="その日の体調メモ" /><Card><Text style={[styles.note, { color: colors.foreground }]}>{record.note}</Text></Card></> : null}
         <View style={[styles.disclaimer, { backgroundColor: `${colors.muted}12` }]}><MaterialIcons name="info-outline" size={17} color={colors.muted} /><Text style={[styles.disclaimerText, { color: colors.muted }]}>この記録は生活の振り返り用です。症状が気になる場合は、保護者や医療機関に相談してください。</Text></View>
       </ScrollView>
+      <ActionDialog visible={deleteDialog === "confirm"} title="この記録を削除しますか？" message="削除した記録は元に戻せません。" confirmLabel="削除する" onConfirm={() => { void remove(); }} onCancel={() => setDeleteDialog(null)} tone="danger" busy={isDeleting} />
+      <ActionDialog visible={deleteDialog === "success"} title="削除しました" message="記録を端末から削除しました。" confirmLabel="履歴へ戻る" onConfirm={() => router.replace("/history")} tone="success" />
+      <ActionDialog visible={deleteDialog === "error"} title="削除に失敗しました" message="記録はこの端末に残っています。時間をおいてもう一度お試しください。" confirmLabel="閉じる" onConfirm={() => setDeleteDialog(null)} tone="danger" />
     </ScreenContainer>
   );
 }
