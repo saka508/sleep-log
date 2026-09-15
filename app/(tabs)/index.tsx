@@ -358,7 +358,7 @@ function weatherIcon(code?: number): MaterialIconName {
 const styles = StyleSheet.create({
   homeRoot: { flex: 1 },
   forestBackdrop: { ...StyleSheet.absoluteFill },
-  forestBackgroundImage: { ...StyleSheet.absoluteFill },
+  forestBackgroundImage: { position: "absolute", top: 0, left: 0, width: "100%", height: "100%" },
   futureEffectLayer: { ...StyleSheet.absoluteFill },
   normalUiLayer: { flex: 1 },
   content: { width: "100%", maxWidth: 460, minHeight: "100%", alignSelf: "center", paddingHorizontal: 12, paddingTop: 4, paddingBottom: 12, gap: 13 },
