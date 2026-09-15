@@ -2,6 +2,7 @@ import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { useState } from "react";
 import { Alert, ScrollView, StyleSheet, Text, View } from "react-native";
 
+import { ActionDialog } from "@/components/action-dialog";
 import { AppTextInput, Card, ChoicePills, PageHeader, PrimaryButton, SectionLabel, ToggleRow } from "@/components/sleep-ui";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
@@ -26,6 +27,8 @@ export default function SettingsScreen() {
   const { colorScheme, preference, setPreference } = useThemeContext();
   const [reminderTime, setReminderTime] = useState(settings.reminderTime);
   const [busy, setBusy] = useState(false);
+  const [pendingDeletion, setPendingDeletion] = useState<"samples" | "records" | null>(null);
+  const [deletionFeedback, setDeletionFeedback] = useState<{ title: string; message: string; failed: boolean } | null>(null);
 
   // Persist the typed time even while the reminder is off, so it is still there
   // the next time the app opens. Rescheduling only matters when it is on.
@@ -182,14 +185,29 @@ export default function SettingsScreen() {
     }
   };
 
-  const confirmRemoveSamples = () => Alert.alert("サンプルデータを削除しますか？", "自分で入力した記録は残ります。", [
-    { text: "キャンセル", style: "cancel" },
-    { text: "削除", style: "destructive", onPress: () => { void commitRecordAction(removeSampleRecords, "削除しました", "サンプルデータを端末から削除しました。"); } },
-  ]);
-  const confirmClear = () => Alert.alert("睡眠・日次記録をすべて削除しますか？", "頭痛イベントは削除されません。この操作は元に戻せないため、先にCSVへ書き出すことをおすすめします。", [
-    { text: "キャンセル", style: "cancel" },
-    { text: "睡眠・日次記録を削除", style: "destructive", onPress: () => { void commitRecordAction(clearAllRecords, "削除しました", "睡眠・日次記録を端末から削除しました。頭痛イベントは残っています。"); } },
-  ]);
+  const confirmDeletion = async () => {
+    if (!pendingDeletion || busy) return;
+    const target = pendingDeletion;
+    setBusy(true);
+    try {
+      const succeeded = await (target === "samples" ? removeSampleRecords() : clearAllRecords());
+      setPendingDeletion(null);
+      setDeletionFeedback(succeeded
+        ? {
+            title: "削除しました",
+            message: target === "samples"
+              ? "サンプルデータを端末から削除しました。"
+              : "睡眠・日次記録を端末から削除しました。頭痛イベントは残っています。",
+            failed: false,
+          }
+        : { title: "削除に失敗しました", message: "既存の記録は変更していません。時間をおいてもう一度お試しください。", failed: true });
+    } catch {
+      setPendingDeletion(null);
+      setDeletionFeedback({ title: "削除に失敗しました", message: "既存の記録は変更していません。時間をおいてもう一度お試しください。", failed: true });
+    } finally {
+      setBusy(false);
+    }
+  };
 
   if (!isReady || !headacheEventsReady) return <ScreenContainer />;
   const hasSamples = records.some((record) => record.isSample);
@@ -229,17 +247,20 @@ export default function SettingsScreen() {
         <SectionLabel title="サンプルデータ" />
         <Card style={styles.formCard}>
           <Text style={[styles.sampleText, { color: colors.muted }]}>グラフの見え方を確認できるサンプルが {records.filter((record) => record.isSample).length} 件あります。自分の記録と区別して表示されます。</Text>
-          {hasSamples ? <PrimaryButton label="サンプルを全削除" icon="delete-outline" secondary disabled={busy} onPress={confirmRemoveSamples} /> : <PrimaryButton label={busy ? "処理中…" : "サンプルを追加"} icon="add" secondary disabled={busy} onPress={() => { void commitRecordAction(addSampleRecords, "追加しました", "サンプルデータを端末に追加しました。"); }} />}
+          {hasSamples ? <PrimaryButton label="サンプルを全削除" icon="delete-outline" secondary disabled={busy} onPress={() => setPendingDeletion("samples")} /> : <PrimaryButton label={busy ? "処理中…" : "サンプルを追加"} icon="add" secondary disabled={busy} onPress={() => { void commitRecordAction(addSampleRecords, "追加しました", "サンプルデータを端末に追加しました。"); }} />}
         </Card>
 
         <SectionLabel title="危険な操作" />
         <Card style={[styles.dangerCard, { borderColor: `${colors.error}4D` }]}>
           <View style={styles.dataIntro}><View style={[styles.dataIcon, { backgroundColor: `${colors.error}16` }]}><MaterialIcons name="delete-forever" size={21} color={colors.error} /></View><View style={styles.timeCopy}><Text style={[styles.timeLabel, { color: colors.foreground }]}>睡眠・日次記録をすべて削除</Text><Text style={[styles.timeHint, { color: colors.muted }]}>頭痛イベントは削除されません。先にCSVへ書き出しておくと安心です。</Text></View></View>
-          <PrimaryButton label={busy ? "処理中…" : "睡眠・日次記録を全削除"} icon="delete-forever" secondary disabled={busy} onPress={confirmClear} />
+          <PrimaryButton label={busy ? "処理中…" : "睡眠・日次記録を全削除"} icon="delete-forever" secondary disabled={busy} onPress={() => setPendingDeletion("records")} />
         </Card>
 
         <View style={[styles.disclaimer, { backgroundColor: `${colors.muted}12` }]}><MaterialIcons name="info-outline" size={17} color={colors.muted} /><Text style={[styles.disclaimerText, { color: colors.muted }]}>Sleep Log は生活記録・傾向把握のためのアプリです。医学的な診断や治療の判断には使用しません。</Text></View>
       </ScrollView>
+      <ActionDialog visible={pendingDeletion === "samples"} title="サンプルデータを削除しますか？" message="自分で入力した記録は残ります。" confirmLabel="削除する" onConfirm={() => { void confirmDeletion(); }} onCancel={() => setPendingDeletion(null)} tone="danger" busy={busy} />
+      <ActionDialog visible={pendingDeletion === "records"} title="睡眠・日次記録をすべて削除しますか？" message="頭痛イベントは削除されません。この操作は元に戻せないため、先にCSVへ書き出すことをおすすめします。" confirmLabel="睡眠・日次記録を削除" onConfirm={() => { void confirmDeletion(); }} onCancel={() => setPendingDeletion(null)} tone="danger" busy={busy} />
+      <ActionDialog visible={Boolean(deletionFeedback)} title={deletionFeedback?.title ?? ""} message={deletionFeedback?.message ?? ""} confirmLabel="閉じる" onConfirm={() => setDeletionFeedback(null)} tone={deletionFeedback?.failed ? "danger" : "success"} />
     </ScreenContainer>
   );
 }

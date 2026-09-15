@@ -3,6 +3,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Linking, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
 
+import { ActionDialog } from "@/components/action-dialog";
 import { Card, ChoicePills, FieldLabel, MultiChoicePills, PageHeader, PrimaryButton, SaveFeedbackCard, ScorePicker, SectionLabel } from "@/components/sleep-ui";
 import { ScreenContainer } from "@/components/screen-container";
 import { LocalDatePicker, LocalTimePicker } from "@/components/local-date-time-picker";
@@ -64,6 +65,8 @@ function HeadacheEventForm() {
   );
   const [isSaving, setIsSaving] = useState(false);
   const [saveFeedback, setSaveFeedback] = useState<{ date: string; startedAt: string } | null>(null);
+  const [deleteDialog, setDeleteDialog] = useState<"confirm" | "success" | "error" | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const saveLock = useRef(false);
 
   const acquireWeather = async () => {
@@ -128,20 +131,17 @@ function HeadacheEventForm() {
     })();
   };
 
-  const confirmDelete = () => existing && Alert.alert("この頭痛イベントを削除しますか？", "削除したイベントは元に戻せません。", [
-    { text: "キャンセル", style: "cancel" },
-    {
-      text: "削除",
-      style: "destructive",
-      onPress: () => { void (async () => {
-        if (!await removeEvent(existing.id)) {
-          Alert.alert("削除に失敗しました", "頭痛イベントはこの端末に残っています。時間をおいてもう一度お試しください。");
-          return;
-        }
-        Alert.alert("削除しました", "頭痛イベントを端末から削除しました。", [{ text: "頭痛一覧へ戻る", onPress: () => router.replace("/headache") }]);
-      })(); },
-    },
-  ]);
+  const remove = async () => {
+    if (!existing || isDeleting) return;
+    setIsDeleting(true);
+    try {
+      setDeleteDialog(await removeEvent(existing.id) ? "success" : "error");
+    } catch {
+      setDeleteDialog("error");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   return (
     <ScreenContainer edges={["top", "bottom", "left", "right"]}>
@@ -187,10 +187,13 @@ function HeadacheEventForm() {
             ]}
           /> : null}
           <PrimaryButton label={isSaving ? "保存中…" : "この頭痛イベントを保存"} icon="check" loading={isSaving} onPress={save} />
-          {existing ? <PrimaryButton label="このイベントを削除" icon="delete-outline" secondary onPress={confirmDelete} /> : null}
+          {existing ? <PrimaryButton label="このイベントを削除" icon="delete-outline" secondary disabled={isDeleting} onPress={() => setDeleteDialog("confirm")} /> : null}
           <View style={[styles.disclaimer, { backgroundColor: `${colors.muted}12` }]}><MaterialIcons name="info-outline" size={17} color={colors.muted} /><Text style={[styles.disclaimerText, { color: colors.muted }]}>この記録は本人の振り返り用であり、医学的な診断や原因の判定ではありません。</Text></View>
         </ScrollView>
       </KeyboardAvoidingView>
+      <ActionDialog visible={deleteDialog === "confirm"} title="この頭痛イベントを削除しますか？" message="削除したイベントは元に戻せません。" confirmLabel="削除する" onConfirm={() => { void remove(); }} onCancel={() => setDeleteDialog(null)} tone="danger" busy={isDeleting} />
+      <ActionDialog visible={deleteDialog === "success"} title="削除しました" message="頭痛イベントを端末から削除しました。" confirmLabel="頭痛一覧へ戻る" onConfirm={() => router.replace("/headache")} tone="success" />
+      <ActionDialog visible={deleteDialog === "error"} title="削除に失敗しました" message="頭痛イベントはこの端末に残っています。時間をおいてもう一度お試しください。" confirmLabel="閉じる" onConfirm={() => setDeleteDialog(null)} tone="danger" />
     </ScreenContainer>
   );
 }
