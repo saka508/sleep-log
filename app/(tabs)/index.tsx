@@ -1,7 +1,7 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { router } from "expo-router";
 import { useCallback, useMemo, useRef, useState, type ComponentProps } from "react";
-import { ActivityIndicator, Alert, PanResponder, Pressable, ScrollView, StyleSheet, Text, View, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
+import { ActivityIndicator, Alert, PanResponder, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
 import Svg, { Circle, Defs, G, LinearGradient, Path, Rect, Stop } from "react-native-svg";
 
 import { AiInsightPanel } from "@/components/ai-insight-panel";
@@ -18,6 +18,7 @@ type MaterialIconName = ComponentProps<typeof MaterialIcons>["name"];
 
 export default function TodayScreen() {
   const colors = useColors("light");
+  const { width } = useWindowDimensions();
   const { records, isReady } = useSleepData();
   const today = todayKey();
   const todayRecord = records.find((item) => item.date === today && !item.isSample);
@@ -35,6 +36,7 @@ export default function TodayScreen() {
   const weatherUpdateLock = useRef(false);
   const displayedWeather = currentWeather ?? latestWeatherRecord?.weather;
   const displayedWeatherStatus = weatherStatus ?? (displayedWeather ? "cached" : "idle");
+  const useStackedTopLayout = width < 380;
   const openRecord = useCallback(() => router.push({ pathname: "/record", params: { date: today } }), [today]);
   const openHeadache = useCallback(() => {
     router.push({
@@ -121,15 +123,16 @@ export default function TodayScreen() {
 
           <HomeHeader date={formatDate(today)} hasTodayRecord={Boolean(todayRecord)} />
 
-          <View style={styles.topGrid}>
+          <View style={[styles.topGrid, useStackedTopLayout && styles.topGridCompact]}>
             <WeatherAction
               weather={displayedWeather}
               status={displayedWeatherStatus}
               errorCode={weatherErrorCode}
               onPress={openHeadache}
               onUpdate={updateWeather}
+              stacked={useStackedTopLayout}
             />
-            <ComparisonCard rows={comparison.rows} minimumRecords={comparison.minimumRecords} lookbackDays={comparison.lookbackDays} />
+            <ComparisonCard rows={comparison.rows} minimumRecords={comparison.minimumRecords} lookbackDays={comparison.lookbackDays} stacked={useStackedTopLayout} />
           </View>
 
           <AiInsightPanel
@@ -186,6 +189,17 @@ function ForestBackdrop() {
           </LinearGradient>
         </Defs>
         <Rect x="0" y="0" width="390" height="900" fill="url(#homeMist)" />
+        <Path d="M0 254 L92 147 L149 204 L223 111 L321 231 L390 163 V398 H0 Z" fill={colors.sleepSky} fillOpacity={0.13} />
+        <Path d="M0 292 L78 190 L145 257 L221 158 L302 276 L390 203 V415 H0 Z" fill={colors.sleepForest} fillOpacity={0.09} />
+        <Path d="M0 332 L50 282 L91 321 L144 248 L198 324 L256 265 L323 335 L390 282 V445 H0 Z" fill={colors.sleepForest} fillOpacity={0.11} />
+        <G fill={colors.sleepForest} fillOpacity={0.12}>
+          <Path d="M2 463 L18 404 L34 463 Z M10 445 H26 V482 H10 Z" />
+          <Path d="M30 465 L47 386 L65 465 Z M40 445 H54 V487 H40 Z" />
+          <Path d="M322 464 L339 390 L357 464 Z M332 445 H346 V487 H332 Z" />
+          <Path d="M350 470 L370 379 L390 470 Z M361 445 H378 V494 H361 Z" />
+          <Path d="M70 470 L85 408 L101 470 Z M79 451 H92 V492 H79 Z" />
+          <Path d="M278 470 L294 406 L310 470 Z M287 451 H300 V492 H287 Z" />
+        </G>
         <G fill={colors.sleepForest} fillOpacity={0.13}>
           <Path d="M-2 55 C18 38 37 42 42 61 C25 72 8 70-2 55Z" />
           <Path d="M22 29 C33 8 53 7 62 24 C51 40 36 44 22 29Z" />
@@ -198,8 +212,15 @@ function ForestBackdrop() {
           <Path d="M7 424 C24 406 44 412 48 431 C31 443 16 441 7 424Z" />
           <Path d="M357 548 C373 528 394 535 398 555 C381 568 366 564 357 548Z" />
           <Path d="M375 586 C391 568 409 575 414 594 C398 607 383 603 375 586Z" />
+          <Path d="M-2 650 C18 624 42 631 48 655 C27 671 8 667-2 650Z" />
+          <Path d="M6 690 C28 663 52 671 56 696 C36 711 16 708 6 690Z" />
+          <Path d="M342 664 C362 637 387 645 392 669 C372 685 352 681 342 664Z" />
+          <Path d="M360 712 C382 683 405 692 411 718 C391 731 372 728 360 712Z" />
         </G>
         <Rect x="0" y="570" width="390" height="330" fill="url(#homeWater)" />
+        <Path d="M0 620 C65 606 118 631 193 617 C267 603 322 628 390 611 V617 C324 634 264 614 192 630 C116 645 58 620 0 636 Z" fill={colors.sleepHomeSurface} fillOpacity={0.32} />
+        <Path d="M0 678 C66 664 124 690 202 674 C271 661 327 686 390 670 V676 C324 693 269 671 201 687 C124 704 64 677 0 694 Z" fill={colors.sleepHomeSurface} fillOpacity={0.24} />
+        <Path d="M0 750 C58 735 128 762 205 745 C281 729 330 754 390 739 V746 C332 762 279 738 204 758 C128 777 60 749 0 766 Z" fill={colors.sleepHomeSurface} fillOpacity={0.2} />
         <Path d="M0 720 L18 684 L34 720 L53 668 L72 720 L92 680 L111 720 L132 657 L154 720 L177 676 L197 720 L219 665 L241 720 L265 681 L285 720 L307 655 L332 720 L354 674 L375 720 L397 663 L416 720 V900 H0 Z" fill={colors.sleepForest} fillOpacity={0.035} />
         <Path d="M0 790 L22 742 L42 790 L64 722 L86 790 L111 739 L133 790 L157 714 L182 790 L207 742 L230 790 L253 722 L277 790 L305 736 L327 790 L351 709 L378 790 L402 737 L420 790 V900 H0 Z" fill={colors.sleepForest} fillOpacity={0.075} />
       </Svg>
@@ -253,12 +274,14 @@ function WeatherAction({
   errorCode,
   onPress,
   onUpdate,
+  stacked,
 }: {
   weather?: WeatherSnapshot;
   status: HomeWeatherStatus;
   errorCode?: WeatherErrorCode;
   onPress: () => void;
   onUpdate: () => void;
+  stacked: boolean;
 }) {
   const colors = useColors("light");
   const isUpdating = status === "updating";
@@ -268,7 +291,7 @@ function WeatherAction({
     : "天候未取得。タップして頭痛イベントを記録";
 
   return (
-    <View style={styles.weatherColumn}>
+    <View style={[styles.weatherColumn, stacked && styles.weatherColumnStacked]}>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={label}
@@ -328,10 +351,10 @@ function WeatherAction({
   );
 }
 
-function ComparisonCard({ rows, minimumRecords, lookbackDays }: { rows: HomeComparisonRow[]; minimumRecords: number; lookbackDays: number }) {
+function ComparisonCard({ rows, minimumRecords, lookbackDays, stacked }: { rows: HomeComparisonRow[]; minimumRecords: number; lookbackDays: number; stacked: boolean }) {
   const colors = useColors("light");
   return (
-    <Card style={[styles.comparisonCard, { backgroundColor: colors.sleepHomeSurface, borderColor: colors.sleepHomeBorder }]}>
+    <Card style={[styles.comparisonCard, stacked && styles.comparisonCardStacked, { backgroundColor: colors.sleepHomeSurface, borderColor: colors.sleepHomeBorder }]}>
       <View style={styles.comparisonHeading}>
         <MaterialIcons name="bar-chart" size={19} color={colors.sleepTeal} />
         <Text style={[styles.comparisonTitle, { color: colors.sleepHomeForeground }]}>本人の記録と比較</Text>
@@ -397,7 +420,9 @@ const styles = StyleSheet.create({
   recordStatus: { minHeight: 34, borderRadius: 999, paddingHorizontal: 10, flexDirection: "row", alignItems: "center", gap: 5, marginTop: 5 },
   recordStatusText: { fontSize: 10, lineHeight: 14, fontWeight: "900" },
   topGrid: { flexDirection: "row", alignItems: "flex-start", gap: 9 },
+  topGridCompact: { flexDirection: "column" },
   weatherColumn: { flex: 0.39, minWidth: 0, alignItems: "center", gap: 5 },
+  weatherColumnStacked: { width: "100%", flex: undefined },
   weatherCircle: { width: "100%", maxWidth: 150, aspectRatio: 1, borderRadius: 999, borderWidth: 1.5, alignItems: "center", justifyContent: "center", padding: 9, overflow: "hidden" },
   weatherScene: { ...StyleSheet.absoluteFill },
   weatherContent: { minWidth: "84%", alignItems: "center", borderRadius: 18, paddingHorizontal: 6, paddingVertical: 5 },
@@ -411,6 +436,7 @@ const styles = StyleSheet.create({
   updateText: { fontSize: 11, lineHeight: 16, fontWeight: "800" },
   weatherStatus: { minHeight: 25, maxWidth: 145, fontSize: 9, lineHeight: 12, fontWeight: "700", textAlign: "center" },
   comparisonCard: { flex: 0.61, minWidth: 0, padding: 10, gap: 0, borderRadius: 18 },
+  comparisonCardStacked: { width: "100%", flex: undefined },
   comparisonHeading: { flexDirection: "row", alignItems: "center", gap: 5, marginBottom: 5 },
   comparisonTitle: { flex: 1, fontSize: 13, lineHeight: 18, fontWeight: "900" },
   tableHeader: { minHeight: 26, flexDirection: "row", alignItems: "center", borderBottomWidth: 1, borderRadius: 8, paddingHorizontal: 2 },
