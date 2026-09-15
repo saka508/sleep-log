@@ -6,6 +6,7 @@ import { ActivityIndicator, Alert, Image, PanResponder, Pressable, ScrollView, S
 import { AiInsightPanel } from "@/components/ai-insight-panel";
 import { Card } from "@/components/sleep-ui";
 import { ScreenContainer } from "@/components/screen-container";
+import { WeatherCircleScene } from "@/components/weather-circle-scene";
 import { useColors } from "@/hooks/use-colors";
 import { buildHomeComparison, type HomeComparisonRow } from "@/lib/home-summary";
 import { homeWeatherStatusMessage, type HomeWeatherStatus } from "@/lib/home-weather";
@@ -201,19 +202,6 @@ function ForestMenuButton({ onPress }: { onPress: () => void }) {
   );
 }
 
-function WeatherScene() {
-  return (
-    <View pointerEvents="none" style={styles.weatherScene}>
-      <Image
-        source={require("../../assets/images/weather-forest-circle-v1.png")}
-        resizeMode="cover"
-        accessibilityIgnoresInvertColors
-        style={styles.weatherSceneImage}
-      />
-    </View>
-  );
-}
-
 function WeatherAction({
   weather,
   status,
@@ -246,7 +234,7 @@ function WeatherAction({
           pressed && styles.pressed,
         ]}
       >
-        <WeatherScene />
+        <WeatherCircleScene weatherCode={weather?.weatherCode} />
         <View style={[styles.weatherContent, { backgroundColor: `${colors.sleepHomeSurface}B8` }]}>
         <MaterialIcons name={icon} size={31} color={weather ? colors.sleepBlue : colors.sleepHomeMuted} />
         {weather ? (
@@ -367,8 +355,6 @@ const styles = StyleSheet.create({
   topGrid: { flexDirection: "row", alignItems: "flex-start", gap: 9 },
   weatherColumn: { flex: 0.39, minWidth: 0, alignItems: "center", gap: 5 },
   weatherCircle: { width: "100%", maxWidth: 154, aspectRatio: 1, borderRadius: 999, borderWidth: 1.5, alignItems: "center", justifyContent: "center", padding: 9, overflow: "hidden", elevation: 3, shadowOpacity: 0.14, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } },
-  weatherScene: { ...StyleSheet.absoluteFill },
-  weatherSceneImage: { width: "100%", height: "100%" },
   weatherContent: { minWidth: "86%", alignItems: "center", borderRadius: 18, paddingHorizontal: 6, paddingVertical: 5 },
   weatherCondition: { fontSize: 9, lineHeight: 12, fontWeight: "800", textAlign: "center" },
   temperature: { fontSize: 21, lineHeight: 25, fontWeight: "900", letterSpacing: -0.5 },
