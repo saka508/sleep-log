@@ -2,7 +2,6 @@ import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { router } from "expo-router";
 import { useCallback, useMemo, useRef, useState, type ComponentProps } from "react";
 import { ActivityIndicator, Alert, Image, PanResponder, Pressable, ScrollView, StyleSheet, Text, View, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
-import Svg, { Circle, Defs, LinearGradient, Path, Stop } from "react-native-svg";
 
 import { AiInsightPanel } from "@/components/ai-insight-panel";
 import { Card } from "@/components/sleep-ui";
@@ -173,7 +172,7 @@ function ForestBackdrop() {
     <View pointerEvents="none" style={styles.forestBackdrop}>
       <Image
         source={require("../../assets/images/sleep-home-forest-v1.png")}
-        resizeMode="cover"
+        resizeMode="stretch"
         accessibilityIgnoresInvertColors
         style={styles.forestBackgroundImage}
       />
@@ -188,8 +187,11 @@ function ForestMenuButton({ onPress }: { onPress: () => void }) {
       accessibilityRole="button"
       accessibilityLabel="メニューを開く"
       onPress={onPress}
-      style={({ pressed }) => [styles.forestMenuButton, { backgroundColor: colors.sleepForest }, pressed && styles.pressed]}
+      style={({ pressed }) => [styles.forestMenuButton, { backgroundColor: colors.sleepForest, shadowColor: colors.sleepForest }, pressed && styles.pressed]}
     >
+      <View pointerEvents="none" style={styles.menuLeafLeft}>
+        <MaterialIcons name="eco" size={31} color={colors.sleepHomeSurface} />
+      </View>
       <MaterialIcons name="menu" size={23} color={colors.sleepHomeSurface} />
       <Text style={[styles.forestMenuText, { color: colors.sleepHomeSurface }]}>メニューを開く</Text>
       <View pointerEvents="none" style={styles.menuLeaf}>
@@ -200,23 +202,14 @@ function ForestMenuButton({ onPress }: { onPress: () => void }) {
 }
 
 function WeatherScene() {
-  const colors = useColors("light");
   return (
     <View pointerEvents="none" style={styles.weatherScene}>
-      <Svg width="100%" height="100%" viewBox="0 0 160 160">
-        <Defs>
-          <LinearGradient id="weatherSky" x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0" stopColor={colors.sleepSky} stopOpacity={0.58} />
-            <Stop offset="0.56" stopColor={colors.sleepHomeSurface} stopOpacity={0.36} />
-            <Stop offset="1" stopColor={colors.sleepTeal} stopOpacity={0.38} />
-          </LinearGradient>
-        </Defs>
-        <Circle cx="80" cy="80" r="80" fill="url(#weatherSky)" />
-        <Circle cx="116" cy="40" r="12" fill={colors.sleepHomeSurface} fillOpacity={0.72} />
-        <Path d="M-8 94 L31 58 L63 87 L91 48 L128 91 L170 58 V116 H-8 Z" fill={colors.sleepSky} fillOpacity={0.48} />
-        <Path d="M-5 108 C35 100 67 114 102 105 C126 98 148 105 166 99 V168 H-5 Z" fill={colors.sleepTeal} fillOpacity={0.32} />
-        <Path d="M0 125 L10 103 L20 125 L32 94 L44 125 L57 105 L68 125 L81 90 L94 125 L108 104 L120 125 L135 92 L149 125 L160 102 V166 H0 Z" fill={colors.sleepForest} fillOpacity={0.48} />
-      </Svg>
+      <Image
+        source={require("../../assets/images/weather-forest-circle-v1.png")}
+        resizeMode="cover"
+        accessibilityIgnoresInvertColors
+        style={styles.weatherSceneImage}
+      />
     </View>
   );
 }
@@ -249,12 +242,12 @@ function WeatherAction({
         onPress={onPress}
         style={({ pressed }) => [
           styles.weatherCircle,
-          { backgroundColor: colors.sleepHomeSurface, borderColor: `${colors.sleepSky}88` },
+          { backgroundColor: colors.sleepHomeSurface, borderColor: `${colors.sleepSky}88`, shadowColor: colors.sleepForest },
           pressed && styles.pressed,
         ]}
       >
         <WeatherScene />
-        <View style={styles.weatherContent}>
+        <View style={[styles.weatherContent, { backgroundColor: `${colors.sleepHomeSurface}B8` }]}>
         <MaterialIcons name={icon} size={31} color={weather ? colors.sleepBlue : colors.sleepHomeMuted} />
         {weather ? (
           <>
@@ -305,7 +298,7 @@ function WeatherAction({
 function ComparisonCard({ rows, minimumRecords, lookbackDays }: { rows: HomeComparisonRow[]; minimumRecords: number; lookbackDays: number }) {
   const colors = useColors("light");
   return (
-    <Card style={[styles.comparisonCard, { backgroundColor: colors.sleepHomeSurface, borderColor: colors.sleepHomeBorder }]}>
+    <Card style={[styles.comparisonCard, { backgroundColor: colors.sleepHomeSurface, borderColor: colors.sleepHomeBorder, shadowColor: colors.sleepForest }]}>
       <View style={styles.comparisonHeading}>
         <MaterialIcons name="bar-chart" size={19} color={colors.sleepTeal} />
         <Text style={[styles.comparisonTitle, { color: colors.sleepHomeForeground }]}>本人の記録と比較</Text>
@@ -373,9 +366,10 @@ const styles = StyleSheet.create({
   recordStatusText: { fontSize: 10, lineHeight: 14, fontWeight: "900" },
   topGrid: { flexDirection: "row", alignItems: "flex-start", gap: 9 },
   weatherColumn: { flex: 0.39, minWidth: 0, alignItems: "center", gap: 5 },
-  weatherCircle: { width: "100%", maxWidth: 150, aspectRatio: 1, borderRadius: 999, borderWidth: 1.5, alignItems: "center", justifyContent: "center", padding: 9, overflow: "hidden" },
+  weatherCircle: { width: "100%", maxWidth: 154, aspectRatio: 1, borderRadius: 999, borderWidth: 1.5, alignItems: "center", justifyContent: "center", padding: 9, overflow: "hidden", elevation: 3, shadowOpacity: 0.14, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } },
   weatherScene: { ...StyleSheet.absoluteFill },
-  weatherContent: { minWidth: "84%", alignItems: "center", borderRadius: 18, paddingHorizontal: 6, paddingVertical: 5 },
+  weatherSceneImage: { width: "100%", height: "100%" },
+  weatherContent: { minWidth: "86%", alignItems: "center", borderRadius: 18, paddingHorizontal: 6, paddingVertical: 5 },
   weatherCondition: { fontSize: 9, lineHeight: 12, fontWeight: "800", textAlign: "center" },
   temperature: { fontSize: 21, lineHeight: 25, fontWeight: "900", letterSpacing: -0.5 },
   pressure: { fontSize: 12, lineHeight: 17, fontWeight: "800" },
@@ -385,7 +379,7 @@ const styles = StyleSheet.create({
   updateButton: { minHeight: 34, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, paddingHorizontal: 8 },
   updateText: { fontSize: 11, lineHeight: 16, fontWeight: "800" },
   weatherStatus: { minHeight: 25, maxWidth: 145, fontSize: 9, lineHeight: 12, fontWeight: "700", textAlign: "center" },
-  comparisonCard: { flex: 0.61, minWidth: 0, padding: 10, gap: 0, borderRadius: 18 },
+  comparisonCard: { flex: 0.61, minWidth: 0, padding: 11, gap: 0, borderRadius: 20, shadowOpacity: 0.08, shadowRadius: 14, shadowOffset: { width: 0, height: 5 }, elevation: 2 },
   comparisonHeading: { flexDirection: "row", alignItems: "center", gap: 5, marginBottom: 5 },
   comparisonTitle: { flex: 1, fontSize: 13, lineHeight: 18, fontWeight: "900" },
   tableHeader: { minHeight: 26, flexDirection: "row", alignItems: "center", borderBottomWidth: 1, borderRadius: 8, paddingHorizontal: 2 },
@@ -398,8 +392,9 @@ const styles = StyleSheet.create({
   comparisonMeta: { fontSize: 8, lineHeight: 12, marginTop: 6 },
   menuArea: { marginHorizontal: -12, paddingHorizontal: 12, paddingTop: 13, borderTopWidth: 1, gap: 5 },
   menuCaption: { textAlign: "center", fontSize: 10, lineHeight: 15 },
-  forestMenuButton: { minHeight: 54, borderRadius: 16, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 9, overflow: "hidden" },
+  forestMenuButton: { minHeight: 58, borderRadius: 18, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 9, overflow: "hidden", shadowOpacity: 0.2, shadowRadius: 12, shadowOffset: { width: 0, height: 5 }, elevation: 4 },
   forestMenuText: { fontSize: 17, lineHeight: 22, fontWeight: "900" },
+  menuLeafLeft: { position: "absolute", left: 15, opacity: 0.15, transform: [{ rotate: "18deg" }] },
   menuLeaf: { position: "absolute", right: 15, opacity: 0.15, transform: [{ rotate: "-18deg" }] },
   disclaimer: { flexDirection: "row", alignItems: "flex-start", gap: 7, borderRadius: 13, padding: 11 },
   disclaimerText: { flex: 1, fontSize: 11, lineHeight: 17 },
