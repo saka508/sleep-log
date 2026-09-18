@@ -9,6 +9,25 @@ export type WeatherVisualType =
   | "thunderstorm"
   | "unknown";
 
+export type WeatherIconName =
+  | "cloud-off"
+  | "wb-sunny"
+  | "cloud"
+  | "thunderstorm"
+  | "ac-unit"
+  | "grain"
+  | "water-drop";
+
+export function weatherIconNameFromCode(weatherCode?: number): WeatherIconName {
+  if (weatherCode === undefined) return "cloud-off";
+  if (weatherCode === 0 || weatherCode === 1) return "wb-sunny";
+  if (weatherCode === 2 || weatherCode === 3) return "cloud";
+  if (weatherCode >= 95) return "thunderstorm";
+  if (weatherCode >= 71 && weatherCode <= 86) return "ac-unit";
+  if (weatherCode >= 51 && weatherCode <= 67) return "grain";
+  return "water-drop";
+}
+
 /**
  * Maps the WMO weather code to a stable presentation category.
  * Text labels remain the responsibility of weatherCodeToJapanese().
