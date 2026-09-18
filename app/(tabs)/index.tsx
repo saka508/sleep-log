@@ -13,6 +13,7 @@ import { homeWeatherStatusMessage, type HomeWeatherStatus } from "@/lib/home-wea
 import { useSleepData } from "@/lib/sleep-store";
 import { formatAcquiredAt, formatDate, todayKey, type WeatherSnapshot } from "@/lib/sleep-utils";
 import { fetchWeatherForCurrentLocation, WeatherError, type WeatherErrorCode } from "@/lib/weather-service";
+import { weatherIconNameFromCode } from "@/lib/weather-visual";
 
 type MaterialIconName = ComponentProps<typeof MaterialIcons>["name"];
 
@@ -217,7 +218,7 @@ function WeatherAction({
 }) {
   const colors = useColors("light");
   const isUpdating = status === "updating";
-  const icon = weatherIcon(weather?.weatherCode);
+  const icon = weatherIconNameFromCode(weather?.weatherCode);
   const label = weather
     ? `${weather.condition}、${weather.temperatureC}度、${weather.pressureHpa}ヘクトパスカル。タップして頭痛イベントを記録`
     : "天候未取得。タップして頭痛イベントを記録";
@@ -324,16 +325,6 @@ function comparisonAccent(key: HomeComparisonRow["key"], colors: ReturnType<type
   if (key === "fatigue") return colors.sleepForest;
   if (key === "exercise") return colors.sleepForest;
   return colors.sleepTeal;
-}
-
-function weatherIcon(code?: number): MaterialIconName {
-  if (code === undefined) return "cloud-off";
-  if (code === 0) return "wb-sunny";
-  if (code <= 3) return "cloud";
-  if (code >= 95) return "thunderstorm";
-  if (code >= 71 && code <= 86) return "ac-unit";
-  if (code >= 51 && code <= 67) return "grain";
-  return "water-drop";
 }
 
 const styles = StyleSheet.create({

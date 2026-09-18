@@ -1,6 +1,19 @@
 import { describe, expect, it } from "vitest";
 
-import { weatherVisualTypeFromCode } from "../lib/weather-visual";
+import { weatherIconNameFromCode, weatherVisualTypeFromCode } from "../lib/weather-visual";
+
+describe("weather icon names", () => {
+  it.each([
+    [undefined, "cloud-off"],
+    [0, "wb-sunny"],
+    [1, "wb-sunny"],
+    [2, "cloud"],
+    [3, "cloud"],
+    [95, "thunderstorm"],
+  ] as const)("maps weather code %s to %s", (weatherCode, expected) => {
+    expect(weatherIconNameFromCode(weatherCode)).toBe(expected);
+  });
+});
 
 describe("weather visual categories", () => {
   it.each([
