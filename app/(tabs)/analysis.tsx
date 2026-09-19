@@ -2,12 +2,15 @@ import { useMemo, useRef, useState } from "react";
 import { Alert, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { ConditionTrendChart } from "@/components/condition-trend-chart";
+import { PressureHistoryChart } from "@/components/pressure-history-chart";
 import { AppTextInput, Card, ChoicePills, MetricCard, PageHeader, PrimaryButton, SectionLabel, SmallStatus, ToggleRow } from "@/components/sleep-ui";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { analyzeRelation, assessAnalysisQuality, buildSleepRecommendation, buildTrend, formatAnalysisMetric, getAnalysisMetricLabel, MIN_RECOMMENDATION_SLEEP_MINUTES, summarizeTrend, type AnalysisGranularity, type AnalysisMetric, type AnalysisQuality, type RelationKey } from "@/lib/condition-analysis";
 import { Collapsible } from "@/components/ui/collapsible";
 import { useSleepData } from "@/lib/sleep-store";
+import { calculatePressureChangesForBatch } from "@/lib/pressure-history";
+import { usePressureHistory } from "@/lib/pressure-history-store";
 import { formatDuration, isTime } from "@/lib/sleep-utils";
 
 const METRIC_OPTIONS: { value: AnalysisMetric; label: string }[] = [
@@ -19,6 +22,7 @@ const RELATIONS: RelationKey[] = ["sleepSleepiness", "sleepClarity", "napSleep",
 export default function AnalysisScreen() {
   const colors = useColors();
   const { records, settings, updateSettings, isReady } = useSleepData();
+  const { batches: pressureBatches, isReady: pressureHistoryReady } = usePressureHistory();
   const [granularity, setGranularity] = useState<AnalysisGranularity>("day");
   const [metric, setMetric] = useState<AnalysisMetric>("sleepMinutes");
   const trend = useMemo(() => buildTrend(records, metric, granularity), [records, metric, granularity]);
@@ -26,6 +30,11 @@ export default function AnalysisScreen() {
   const relations = useMemo(() => RELATIONS.map((key) => analyzeRelation(records, key)), [records]);
   const quality = useMemo(() => assessAnalysisQuality(records, metric, granularity, relations), [records, metric, granularity, relations]);
   const recommendation = useMemo(() => buildSleepRecommendation(records), [records]);
+  const latestPressureBatch = pressureBatches[0];
+  const latestPressureChanges = useMemo(
+    () => latestPressureBatch ? calculatePressureChangesForBatch(latestPressureBatch) : {},
+    [latestPressureBatch],
+  );
   const [bedTimeOverride, setBedTime] = useState<string | null>(null);
   const [wakeTimeOverride, setWakeTime] = useState<string | null>(null);
   const [sleepMinutesOverride, setSleepMinutes] = useState<string | null>(null);
@@ -70,7 +79,7 @@ export default function AnalysisScreen() {
     })();
   };
 
-  if (!isReady) return <ScreenContainer />;
+  if (!isReady || !pressureHistoryReady) return <ScreenContainer />;
 
   return (
     <ScreenContainer>
@@ -89,6 +98,20 @@ export default function AnalysisScreen() {
             <View style={styles.statBox}><MetricCard label="データ日数" value={`${summary.dataDays} 日`} icon="event-available" accent={colors.primary} /></View>
           </View>
           <Text style={[styles.note, { color: colors.muted }]}>欠損している値は平均・中央値・線で扱わず、「データなし」として残します。{granularity === "day" ? "横軸は記録した実際の日付です。" : "週・月はその期間にある値だけを平均しています。"}</Text>
+        </Card>
+
+        <SectionLabel title="時刻別の気圧" />
+        <Card style={styles.chartCard}>
+          {latestPressureBatch ? <>
+            <Text style={[styles.chartTitle, { color: colors.foreground }]}>最後に取得した気圧系列</Text>
+            <PressureHistoryChart batch={latestPressureBatch} />
+            <View style={styles.statsGrid}>
+              <View style={styles.statBox}><MetricCard label="3時間変化" value={formatPressureChange(latestPressureChanges.change3Hours)} icon="trending-flat" accent={colors.sleepBlue} /></View>
+              <View style={styles.statBox}><MetricCard label="24時間変化" value={formatPressureChange(latestPressureChanges.change24Hours)} icon="trending-flat" accent={colors.sleepBlue} /></View>
+              <View style={styles.statBox}><MetricCard label="有効時刻" value={`${latestPressureBatch.points.length} 件`} icon="schedule" accent={colors.sleepBlue} /></View>
+            </View>
+            <Text style={[styles.note, { color: colors.muted }]}>取得 {new Date(latestPressureBatch.fetchedAt).toLocaleString("ja-JP")}。Open-Meteoの地上気圧モデル系列であり、観測所の実測値や頭痛の原因を示すものではありません。</Text>
+          </> : <Text style={[styles.note, { color: colors.muted }]}>気圧履歴はまだありません。ホームの「天候を更新」または頭痛イベント画面の天候取得で、取得できた範囲を表示します。</Text>}
         </Card>
 
         <DataQualityCard quality={quality} />
@@ -121,6 +144,13 @@ export default function AnalysisScreen() {
       </ScrollView>
     </ScreenContainer>
   );
+}
+
+function formatPressureChange(change?: { changeHpa: number }) {
+  if (!change) return "データ不足";
+  const prefix = change.changeHpa > 0 ? "+" : "";
+  const arrow = change.changeHpa > 0 ? "↑" : change.changeHpa < 0 ? "↓" : "→";
+  return `${prefix}${change.changeHpa.toFixed(1)} ${arrow}`;
 }
 
 function RelationCard({ relation }: { relation: ReturnType<typeof analyzeRelation> }) {

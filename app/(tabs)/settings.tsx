@@ -13,6 +13,9 @@ import { exportRecords, pickAndReadCsv, recordsFromCsv } from "@/lib/csv-service
 import { exportHeadacheEvents, pickAndReadHeadacheBackup } from "@/lib/headache-backup-service";
 import { headacheEventsFromBackupJson } from "@/lib/headache-events";
 import { useHeadacheEvents } from "@/lib/headache-store";
+import { exportPressureHistory, pickAndReadPressureHistoryBackup } from "@/lib/pressure-history-backup-service";
+import { pressureHistoryFromBackupJson } from "@/lib/pressure-history";
+import { usePressureHistory } from "@/lib/pressure-history-store";
 
 
 
@@ -24,6 +27,7 @@ export default function SettingsScreen() {
   const colors = useColors();
   const { records, settings, updateSettings, importRecords, removeSampleRecords, addSampleRecords, clearAllRecords, isReady } = useSleepData();
   const { events: headacheEvents, importEvents: importHeadacheEvents, isReady: headacheEventsReady } = useHeadacheEvents();
+  const { batches: pressureBatches, importStore: importPressureHistory, isReady: pressureHistoryReady } = usePressureHistory();
   const { colorScheme, preference, setPreference } = useThemeContext();
   const [reminderTime, setReminderTime] = useState(settings.reminderTime);
   const [busy, setBusy] = useState(false);
@@ -143,6 +147,38 @@ export default function SettingsScreen() {
     }
   };
 
+  const doPressureHistoryExport = async () => {
+    try {
+      setBusy(true);
+      await exportPressureHistory({ schemaVersion: 1, batches: pressureBatches });
+    } catch {
+      Alert.alert("バックアップできませんでした", "もう一度試してください。");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const doPressureHistoryImport = async () => {
+    try {
+      setBusy(true);
+      const text = await pickAndReadPressureHistoryBackup();
+      if (!text) return;
+      const parsed = pressureHistoryFromBackupJson(text);
+      if (!parsed.batches.length) {
+        Alert.alert("読み込める気圧履歴がありません", "Sleep Logが書き出した気圧履歴JSONを選んでください。");
+        return;
+      }
+      Alert.alert("気圧履歴を復元しますか？", `${parsed.batches.length}件の取得バッチを追加します。睡眠CSV・日次記録・頭痛イベントは変更しません。`, [
+        { text: "キャンセル", style: "cancel" },
+        { text: "復元する", onPress: () => { void commitPressureHistoryImport(parsed); } },
+      ]);
+    } catch {
+      Alert.alert("復元できませんでした", "気圧履歴JSONの形式を確認してください。");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const commitRecordImport = async (parsed: typeof records) => {
     setBusy(true);
     try {
@@ -166,6 +202,20 @@ export default function SettingsScreen() {
         return;
       }
       Alert.alert("復元しました", `${count}件の頭痛イベントを追加・更新しました。`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const commitPressureHistoryImport = async (parsed: ReturnType<typeof pressureHistoryFromBackupJson>) => {
+    setBusy(true);
+    try {
+      const count = await importPressureHistory(parsed);
+      if (count === null) {
+        Alert.alert("復元に失敗しました", "既存の気圧履歴は変更していません。時間をおいてもう一度お試しください。");
+        return;
+      }
+      Alert.alert("復元しました", `${count}件の気圧取得バッチを追加・更新しました。`);
     } finally {
       setBusy(false);
     }
@@ -209,7 +259,7 @@ export default function SettingsScreen() {
     }
   };
 
-  if (!isReady || !headacheEventsReady) return <ScreenContainer />;
+  if (!isReady || !headacheEventsReady || !pressureHistoryReady) return <ScreenContainer />;
   const hasSamples = records.some((record) => record.isSample);
 
   return (
@@ -242,6 +292,11 @@ export default function SettingsScreen() {
           <Text style={[styles.timeHint, { color: colors.muted }]}>発生日時・複数症状・天候を完全に復元します。既存の睡眠CSVとは別です。</Text>
           <PrimaryButton label={busy ? "処理中…" : `頭痛イベントを書き出す（${headacheEvents.length}件）`} icon="file-download" disabled={busy || headacheEvents.length === 0} onPress={() => void doHeadacheExport()} />
           <PrimaryButton label={busy ? "処理中…" : "頭痛イベントを復元"} icon="file-upload" secondary disabled={busy} onPress={() => void doHeadacheImport()} />
+          <View style={[styles.backupDivider, { backgroundColor: colors.border }]} />
+          <Text style={[styles.backupTitle, { color: colors.foreground }]}>気圧履歴（JSON）</Text>
+          <Text style={[styles.timeHint, { color: colors.muted }]}>時刻付きの気圧モデル系列です。座標・住所は含めず、睡眠CSVとは別に復元します。</Text>
+          <PrimaryButton label={busy ? "処理中…" : `気圧履歴を書き出す（${pressureBatches.length}件）`} icon="file-download" disabled={busy || pressureBatches.length === 0} onPress={() => void doPressureHistoryExport()} />
+          <PrimaryButton label={busy ? "処理中…" : "気圧履歴を復元"} icon="file-upload" secondary disabled={busy} onPress={() => void doPressureHistoryImport()} />
         </Card>
 
         <SectionLabel title="サンプルデータ" />

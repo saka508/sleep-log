@@ -34,16 +34,17 @@ describe("headache events", () => {
     expect(mergeHeadacheEvents([first], [{ ...first, severity: 7, updatedAt: "2026-09-13T02:00:00.000Z" }])).toEqual([expect.objectContaining({ id: "first", severity: 7 })]);
   });
 
-  it("distinguishes zero, missing severity, observation time, and fetch time", () => {
+  it("distinguishes zero, missing severity, observation time, fetch time, and an optional pressure batch", () => {
     const zero = normalizeHeadacheEvent(event("zero", { severity: 0 }));
     const missing = normalizeHeadacheEvent(event("missing", { severity: null }));
     expect(zero?.severity).toBe(0);
     expect(missing?.severity).toBeNull();
-    const withWeather = normalizeHeadacheEvent(event("weather", { weatherSnapshot: {
+    const withWeather = normalizeHeadacheEvent(event("weather", { pressureHistoryBatchId: "pressure-batch-1", weatherSnapshot: {
       pressureHpa: 1001.24, temperatureC: 22.36, condition: "曇り", weatherCode: 3,
       observedAt: "2026-09-13T01:00:00.000Z", fetchedAt: "2026-09-13T01:07:00.000Z", source: "Open-Meteo",
     } }));
     expect(withWeather?.weatherSnapshot).toMatchObject({ pressureHpa: 1001.2, temperatureC: 22.4, observedAt: "2026-09-13T01:00:00.000Z", fetchedAt: "2026-09-13T01:07:00.000Z" });
+    expect(withWeather?.pressureHistoryBatchId).toBe("pressure-batch-1");
   });
 
   it("clamps out-of-range severity and drops invalid symptoms and weather", () => {

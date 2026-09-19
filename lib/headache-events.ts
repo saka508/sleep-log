@@ -21,6 +21,7 @@ export type HeadacheEvent = {
   severity: number | null;
   symptoms: HeadacheFeature[];
   weatherSnapshot?: HeadacheEventWeatherSnapshot;
+  pressureHistoryBatchId?: string;
   source: "manual";
   createdAt: string;
   updatedAt: string;
@@ -80,6 +81,9 @@ export function normalizeHeadacheEvent(value: unknown): HeadacheEvent | null {
     ? [...new Set(event.symptoms.filter((feature): feature is HeadacheFeature => FEATURE_VALUES.has(feature as HeadacheFeature)))]
     : [];
   const weatherSnapshot = normalizeWeatherSnapshot(event.weatherSnapshot);
+  const pressureHistoryBatchId = typeof event.pressureHistoryBatchId === "string" && event.pressureHistoryBatchId.trim()
+    ? event.pressureHistoryBatchId.trim()
+    : undefined;
   return {
     schemaVersion: 1,
     id: event.id.trim(),
@@ -88,6 +92,7 @@ export function normalizeHeadacheEvent(value: unknown): HeadacheEvent | null {
     severity: normalizeSeverity(event.severity),
     symptoms,
     ...(weatherSnapshot ? { weatherSnapshot } : {}),
+    ...(pressureHistoryBatchId ? { pressureHistoryBatchId } : {}),
     source: "manual",
     createdAt: event.createdAt,
     updatedAt: event.updatedAt,

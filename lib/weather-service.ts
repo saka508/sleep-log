@@ -19,7 +19,7 @@ export class WeatherError extends Error {
   }
 }
 
-type Coordinates = { latitude: number; longitude: number };
+export type Coordinates = { latitude: number; longitude: number };
 type GeolocationProvider = Pick<Geolocation, "getCurrentPosition">;
 type FetchProvider = typeof fetch;
 export type CurrentWeatherSnapshot = WeatherSnapshot & { observedAt: string };

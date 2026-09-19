@@ -10,9 +10,11 @@ import { LocalDatePicker, LocalTimePicker } from "@/components/local-date-time-p
 import { useColors } from "@/hooks/use-colors";
 import { createHeadacheEventId, localDateTimeToIso, type HeadacheEventWeatherSnapshot } from "@/lib/headache-events";
 import { useHeadacheEvents } from "@/lib/headache-store";
+import { createPressureHistoryBatch } from "@/lib/pressure-history";
+import { usePressureHistory } from "@/lib/pressure-history-store";
 import { useSleepData } from "@/lib/sleep-store";
 import { formatAcquiredAt, HEADACHE_FEATURE_OPTIONS, todayKey, type HeadacheFeature } from "@/lib/sleep-utils";
-import { fetchWeatherForCurrentLocation, OPEN_METEO_ATTRIBUTION_URL, WeatherError } from "@/lib/weather-service";
+import { fetchCurrentWeather, fetchRecentSurfacePressureHistory, OPEN_METEO_ATTRIBUTION_URL, requestCurrentCoordinates, WeatherError } from "@/lib/weather-service";
 
 type SeverityChoice = "none" | "record";
 
@@ -25,7 +27,8 @@ export default function HeadacheEventScreen() {
   const { id, weatherDate } = useLocalSearchParams<{ id?: string; weatherDate?: string }>();
   const { isReady } = useHeadacheEvents();
   const { isReady: sleepReady } = useSleepData();
-  if (!isReady || !sleepReady) return <ScreenContainer />;
+  const { isReady: pressureHistoryReady } = usePressureHistory();
+  if (!isReady || !sleepReady || !pressureHistoryReady) return <ScreenContainer />;
   return <HeadacheEventForm key={`${id ?? "new"}:${weatherDate ?? ""}`} />;
 }
 
@@ -33,6 +36,7 @@ function HeadacheEventForm() {
   const colors = useColors();
   const { id, weatherDate } = useLocalSearchParams<{ id?: string; weatherDate?: string }>();
   const { events, saveEvent, removeEvent } = useHeadacheEvents();
+  const { saveBatch } = usePressureHistory();
   const { records } = useSleepData();
   const existing = useMemo(() => events.find((event) => event.id === id), [events, id]);
   const inheritedWeather = useMemo(() => {
@@ -55,6 +59,7 @@ function HeadacheEventForm() {
   const [severity, setSeverity] = useState<number | null>(existing?.severity ?? null);
   const [symptoms, setSymptoms] = useState<HeadacheFeature[]>(existing?.symptoms ?? []);
   const [weather, setWeather] = useState<HeadacheEventWeatherSnapshot | undefined>(existing?.weatherSnapshot ?? inheritedWeather);
+  const [pressureHistoryBatchId, setPressureHistoryBatchId] = useState<string | undefined>(existing?.pressureHistoryBatchId);
   const [weatherLoading, setWeatherLoading] = useState(false);
   const [weatherMessage, setWeatherMessage] = useState(
     existing?.weatherSnapshot
@@ -73,7 +78,13 @@ function HeadacheEventForm() {
     setWeatherLoading(true);
     setWeatherMessage("現在地から天候を取得しています…");
     try {
-      const snapshot = await fetchWeatherForCurrentLocation();
+      const coordinates = await requestCurrentCoordinates();
+      const [weatherResult, historyResult] = await Promise.allSettled([
+        fetchCurrentWeather(coordinates),
+        fetchRecentSurfacePressureHistory(coordinates),
+      ]);
+      if (weatherResult.status === "rejected") throw weatherResult.reason;
+      const snapshot = weatherResult.value;
       setWeather({
         pressureHpa: snapshot.pressureHpa,
         temperatureC: snapshot.temperatureC,
@@ -83,7 +94,19 @@ function HeadacheEventForm() {
         fetchedAt: snapshot.fetchedAt,
         source: snapshot.source,
       });
-      setWeatherMessage("取得できました。位置情報や住所は保存しません。");
+      if (historyResult.status === "fulfilled") {
+        const batch = createPressureHistoryBatch(historyResult.value);
+        if (batch && await saveBatch(batch)) {
+          setPressureHistoryBatchId(batch.id);
+          setWeatherMessage("取得できました。気圧履歴も端末内に保存しました。位置情報や住所は保存しません。");
+        } else {
+          setPressureHistoryBatchId(undefined);
+          setWeatherMessage("取得できました。気圧履歴は保存できませんでしたが、頭痛イベントは保存できます。");
+        }
+      } else {
+        setPressureHistoryBatchId(undefined);
+        setWeatherMessage("取得できました。気圧履歴はデータ不足のため保存していません。頭痛イベントは保存できます。");
+      }
     } catch (error) {
       const message = error instanceof WeatherError ? error.message : "天候データを取得できませんでした。";
       setWeatherMessage(`${message} 頭痛イベントは天候なしで保存できます。`);
@@ -113,6 +136,7 @@ function HeadacheEventForm() {
           severity,
           symptoms,
           ...(weather ? { weatherSnapshot: weather } : {}),
+          ...(weather && pressureHistoryBatchId ? { pressureHistoryBatchId } : {}),
           source: "manual",
           createdAt: existing?.createdAt ?? now,
           updatedAt: now,
@@ -172,7 +196,7 @@ function HeadacheEventForm() {
             <PrimaryButton label={weatherLoading ? "取得中…" : weather ? "現在地から更新" : "現在地から天候を取得"} icon={weatherLoading ? undefined : "my-location"} disabled={weatherLoading} onPress={() => { void acquireWeather(); }} />
             {weatherLoading ? <ActivityIndicator color={colors.primary} /> : null}
             {weatherMessage ? <Text accessibilityLiveRegion="polite" style={[styles.message, { color: colors.muted }]}>{weatherMessage}</Text> : null}
-            {weather ? <PrimaryButton label="天候データを外す" secondary onPress={() => { setWeather(undefined); setWeatherMessage("天候データを外しました。"); }} /> : null}
+            {weather ? <PrimaryButton label="天候データを外す" secondary onPress={() => { setWeather(undefined); setPressureHistoryBatchId(undefined); setWeatherMessage("天候データを外しました。"); }} /> : null}
             <Text style={[styles.message, { color: colors.muted }]}>位置情報は取得操作の時だけ利用し、座標・住所は保存しません。気圧と頭痛の因果関係を示すものではありません。</Text>
             <Text accessibilityRole="link" onPress={() => { void Linking.openURL(OPEN_METEO_ATTRIBUTION_URL); }} style={[styles.link, { color: colors.primary }]}>Weather data by Open-Meteo.com</Text>
           </Card>
