@@ -2,7 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import {
   calculatePressureChanges,
+  calculatePressureChangesForBatch,
+  createPressureHistoryBatch,
+  createPressureHistoryBatchId,
   isPressureHistoryStale,
+  normalizePressureHistoryStore,
+  pressureHistoryFromBackupJson,
+  pressureHistoryToBackupJson,
   PRESSURE_HISTORY_SOURCE,
   PRESSURE_REFERENCE_TOLERANCE_MS,
   type PressureHistoryPoint,
@@ -105,5 +111,47 @@ describe("pressure history calculations", () => {
     expect(isPressureHistoryStale("2026-09-15T00:00:00.000Z", 60 * 60 * 1000, Date.parse("2026-09-15T00:30:00.000Z"))).toBe(false);
     expect(isPressureHistoryStale("2026-09-15T00:00:00.000Z", 60 * 60 * 1000, Date.parse("2026-09-15T02:00:00.000Z"))).toBe(true);
     expect(isPressureHistoryStale("invalid", 60 * 60 * 1000)).toBe(true);
+  });
+
+  it("stores a privacy-preserving batch without copying a location scope", () => {
+    const batch = createPressureHistoryBatch({
+      fetchedAt: "2026-09-15T03:05:00.000Z",
+      latestAvailableAt: "2026-09-15T03:00:00.000Z",
+      points: [
+        point("2026-09-15T00:00:00.000Z", 1005, { locationScope: "location-a" }),
+        point("2026-09-15T03:00:00.000Z", 1002, { locationScope: "location-a" }),
+      ],
+    }, "batch-a");
+    expect(batch).toMatchObject({ id: "batch-a", pressureKind: "surface_pressure", source: PRESSURE_HISTORY_SOURCE });
+    expect(batch?.points[0]).not.toHaveProperty("locationScope");
+    expect(calculatePressureChangesForBatch(batch!).change3Hours?.changeHpa).toBe(-3);
+  });
+
+  it("drops broken or expired batches while preserving other stored history", () => {
+    const valid = createPressureHistoryBatch({
+      fetchedAt: "2026-09-15T03:05:00.000Z",
+      latestAvailableAt: "2026-09-15T03:00:00.000Z",
+      points: [point("2026-09-15T03:00:00.000Z", 1002)],
+    }, "valid");
+    const store = normalizePressureHistoryStore({
+      schemaVersion: 1,
+      batches: [valid, { schemaVersion: 1, id: "broken", points: [] }],
+    }, new Date("2026-09-20T00:00:00.000Z"));
+    expect(store.batches.map((batch) => batch.id)).toEqual(["valid"]);
+
+    const expired = normalizePressureHistoryStore({ schemaVersion: 1, batches: [valid] }, new Date("2026-10-20T00:00:00.000Z"));
+    expect(expired.batches).toEqual([]);
+  });
+
+  it("round-trips versioned pressure history JSON and keeps unsupported payloads out", () => {
+    const batch = createPressureHistoryBatch({
+      fetchedAt: "2026-09-15T03:05:00.000Z",
+      latestAvailableAt: "2026-09-15T03:00:00.000Z",
+      points: [point("2026-09-15T03:00:00.000Z", 1002)],
+    }, "backup-batch");
+    const restored = pressureHistoryFromBackupJson(pressureHistoryToBackupJson({ schemaVersion: 1, batches: [batch!] }), new Date("2026-09-16T00:00:00.000Z"));
+    expect(restored.batches).toEqual([expect.objectContaining({ id: "backup-batch" })]);
+    expect(() => pressureHistoryFromBackupJson(JSON.stringify({ format: "other", version: 1 }))).toThrow("Invalid pressure history backup");
+    expect(createPressureHistoryBatchId(1234, 0.5)).toMatch(/^pressure-/);
   });
 });

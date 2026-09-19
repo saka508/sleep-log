@@ -1,7 +1,7 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { router } from "expo-router";
-import { useCallback, useMemo, useRef, useState, type ComponentProps } from "react";
-import { ActivityIndicator, Alert, Image, PanResponder, Pressable, ScrollView, StyleSheet, Text, View, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from "react";
+import { ActivityIndicator, Alert, AppState, Image, PanResponder, Pressable, ScrollView, StyleSheet, Text, View, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
 
 import { AiInsightPanel } from "@/components/ai-insight-panel";
 import { Card } from "@/components/sleep-ui";
@@ -10,9 +10,11 @@ import { WeatherCircleScene } from "@/components/weather-circle-scene";
 import { useColors } from "@/hooks/use-colors";
 import { buildHomeComparison, type HomeComparisonRow } from "@/lib/home-summary";
 import { homeWeatherStatusMessage, type HomeWeatherStatus } from "@/lib/home-weather";
+import { calculatePressureChangesForBatch, createPressureHistoryBatch, isPressureHistoryStale, type PressureHistoryBatch } from "@/lib/pressure-history";
+import { usePressureHistory } from "@/lib/pressure-history-store";
 import { useSleepData } from "@/lib/sleep-store";
 import { formatAcquiredAt, formatDate, todayKey, type WeatherSnapshot } from "@/lib/sleep-utils";
-import { fetchWeatherForCurrentLocation, WeatherError, type WeatherErrorCode } from "@/lib/weather-service";
+import { fetchCurrentWeather, fetchRecentSurfacePressureHistory, requestCurrentCoordinates, WeatherError, type WeatherErrorCode } from "@/lib/weather-service";
 import { weatherIconNameFromCode } from "@/lib/weather-visual";
 
 type MaterialIconName = ComponentProps<typeof MaterialIcons>["name"];
@@ -20,6 +22,7 @@ type MaterialIconName = ComponentProps<typeof MaterialIcons>["name"];
 export default function TodayScreen() {
   const colors = useColors("light");
   const { records, isReady } = useSleepData();
+  const { batches: pressureBatches, isReady: pressureHistoryReady, saveBatch } = usePressureHistory();
   const today = todayKey();
   const todayRecord = records.find((item) => item.date === today && !item.isSample);
   const personalRecords = useMemo(() => records.filter((item) => !item.isSample), [records]);
@@ -33,8 +36,15 @@ export default function TodayScreen() {
   const [currentWeather, setCurrentWeather] = useState<WeatherSnapshot>();
   const [weatherStatus, setWeatherStatus] = useState<HomeWeatherStatus>();
   const [weatherErrorCode, setWeatherErrorCode] = useState<WeatherErrorCode>();
+  const [currentPressureBatch, setCurrentPressureBatch] = useState<PressureHistoryBatch>();
   const weatherUpdateLock = useRef(false);
+  const automaticRefreshEnabled = useRef(false);
   const displayedWeather = currentWeather ?? latestWeatherRecord?.weather;
+  const displayedPressureBatch = currentPressureBatch ?? pressureBatches[0];
+  const pressureChanges = useMemo(
+    () => displayedPressureBatch ? calculatePressureChangesForBatch(displayedPressureBatch) : {},
+    [displayedPressureBatch],
+  );
   const displayedWeatherStatus = weatherStatus ?? (displayedWeather ? "cached" : "idle");
   const openRecord = useCallback(() => router.push({ pathname: "/record", params: { date: today } }), [today]);
   const openHeadache = useCallback(() => {
@@ -43,13 +53,19 @@ export default function TodayScreen() {
       params: latestWeatherRecord?.weather ? { weatherDate: latestWeatherRecord.date } : {},
     });
   }, [latestWeatherRecord]);
-  const updateWeather = useCallback(async () => {
+  const updateWeather = useCallback(async (mode: "manual" | "automatic" = "manual") => {
     if (weatherUpdateLock.current) return;
     weatherUpdateLock.current = true;
     setWeatherStatus("updating");
     setWeatherErrorCode(undefined);
     try {
-      const snapshot = await fetchWeatherForCurrentLocation();
+      const coordinates = await requestCurrentCoordinates();
+      const [weatherResult, historyResult] = await Promise.allSettled([
+        fetchCurrentWeather(coordinates),
+        fetchRecentSurfacePressureHistory(coordinates),
+      ]);
+      if (weatherResult.status === "rejected") throw weatherResult.reason;
+      const snapshot = weatherResult.value;
       setCurrentWeather({
         pressureHpa: snapshot.pressureHpa,
         temperatureC: snapshot.temperatureC,
@@ -58,6 +74,11 @@ export default function TodayScreen() {
         fetchedAt: snapshot.fetchedAt,
         source: snapshot.source,
       });
+      if (historyResult.status === "fulfilled") {
+        const batch = createPressureHistoryBatch(historyResult.value);
+        if (batch && await saveBatch(batch)) setCurrentPressureBatch(batch);
+      }
+      if (mode === "manual") automaticRefreshEnabled.current = true;
       setWeatherStatus("fresh");
     } catch (error) {
       setWeatherErrorCode(error instanceof WeatherError ? error.code : "network");
@@ -65,7 +86,29 @@ export default function TodayScreen() {
     } finally {
       weatherUpdateLock.current = false;
     }
-  }, []);
+  }, [saveBatch]);
+
+  useEffect(() => {
+    const latestBatch = pressureBatches[0];
+    if (!latestBatch || !pressureHistoryReady || !isPressureHistoryStale(latestBatch.fetchedAt, 60 * 60 * 1000)) return;
+    if (typeof navigator === "undefined" || !navigator.permissions?.query) return;
+    let active = true;
+    void navigator.permissions.query({ name: "geolocation" as PermissionName }).then((permission) => {
+      if (active && permission.state === "granted") void updateWeather("automatic");
+    }).catch(() => undefined);
+    return () => { active = false; };
+  }, [pressureBatches, pressureHistoryReady, updateWeather]);
+
+  useEffect(() => {
+    const refreshIfNeeded = () => {
+      const latestBatch = pressureBatches[0];
+      if (!automaticRefreshEnabled.current || !latestBatch || !isPressureHistoryStale(latestBatch.fetchedAt, 60 * 60 * 1000)) return;
+      void updateWeather("automatic");
+    };
+    const interval = setInterval(refreshIfNeeded, 60 * 60 * 1000);
+    const subscription = AppState.addEventListener("change", (state) => { if (state === "active") refreshIfNeeded(); });
+    return () => { clearInterval(interval); subscription.remove(); };
+  }, [pressureBatches, updateWeather]);
 
   const [swipeControl] = useState(() => {
     let currentScrollY = 0;
@@ -94,7 +137,7 @@ export default function TodayScreen() {
     swipeControl.setScrollY(event.nativeEvent.contentOffset.y);
   };
 
-  if (!isReady) return <ScreenContainer />;
+  if (!isReady || !pressureHistoryReady) return <ScreenContainer />;
 
   return (
     <ScreenContainer style={{ backgroundColor: colors.sleepHomeBackground }}>
@@ -128,7 +171,8 @@ export default function TodayScreen() {
               status={displayedWeatherStatus}
               errorCode={weatherErrorCode}
               onPress={openHeadache}
-              onUpdate={updateWeather}
+              pressureChanges={pressureChanges}
+              onUpdate={() => { void updateWeather(); }}
             />
             <ComparisonCard rows={comparison.rows} minimumRecords={comparison.minimumRecords} lookbackDays={comparison.lookbackDays} />
           </View>
@@ -207,12 +251,14 @@ function WeatherAction({
   weather,
   status,
   errorCode,
+  pressureChanges,
   onPress,
   onUpdate,
 }: {
   weather?: WeatherSnapshot;
   status: HomeWeatherStatus;
   errorCode?: WeatherErrorCode;
+  pressureChanges: ReturnType<typeof calculatePressureChangesForBatch>;
   onPress: () => void;
   onUpdate: () => void;
 }) {
@@ -220,7 +266,7 @@ function WeatherAction({
   const isUpdating = status === "updating";
   const icon = weatherIconNameFromCode(weather?.weatherCode);
   const label = weather
-    ? `${weather.condition}、${weather.temperatureC}度、${weather.pressureHpa}ヘクトパスカル。タップして頭痛イベントを記録`
+    ? `${weather.condition}、${weather.temperatureC}度、${weather.pressureHpa}ヘクトパスカル。${pressureChangeLabel("3時間", pressureChanges.change3Hours)}。${pressureChangeLabel("24時間", pressureChanges.change24Hours)}。タップして頭痛イベントを記録`
     : "天候未取得。タップして頭痛イベントを記録";
 
   return (
@@ -243,23 +289,21 @@ function WeatherAction({
             <Text style={[styles.weatherCondition, { color: colors.sleepHomeForeground }]}>{weather.condition}</Text>
             <Text style={[styles.temperature, { color: colors.sleepHomeForeground }]}>{weather.temperatureC}℃</Text>
             <Text style={[styles.pressure, { color: colors.sleepHomeMuted }]}>{weather.pressureHpa} hPa</Text>
-            <View style={[styles.headacheCue, { backgroundColor: `${colors.sleepHeadache}16` }]}>
-              <MaterialIcons name="healing" size={13} color={colors.sleepHeadache} />
-              <Text style={[styles.headacheCueText, { color: colors.sleepHeadache }]}>頭痛を記録</Text>
+            <View style={[styles.pressureChangeBand, { backgroundColor: `${colors.sleepHomeSurface}D8` }]}>
+              <Text style={[styles.pressureChangeText, { color: colors.sleepBlue }]}>{pressureChangeLabel("3h", pressureChanges.change3Hours)}</Text>
+              <Text style={[styles.pressureChangeText, { color: colors.sleepBlue }]}>{pressureChangeLabel("24h", pressureChanges.change24Hours)}</Text>
             </View>
           </>
         ) : (
           <>
             <Text style={[styles.temperature, { color: colors.sleepHomeForeground }]}>--</Text>
             <Text style={[styles.pressure, { color: colors.sleepHomeMuted }]}>天候未取得</Text>
-            <View style={[styles.headacheCue, { backgroundColor: `${colors.sleepHeadache}16` }]}>
-              <MaterialIcons name="healing" size={13} color={colors.sleepHeadache} />
-              <Text style={[styles.headacheCueText, { color: colors.sleepHeadache }]}>頭痛を記録</Text>
-            </View>
+            <Text style={[styles.pressureChangeMissing, { color: colors.sleepHomeMuted }]}>気圧変化：データ不足</Text>
           </>
         )}
         </View>
       </Pressable>
+      <Text style={[styles.headacheActionHint, { color: colors.sleepHeadache }]}>タップして頭痛を記録</Text>
       <Text style={[styles.weatherTime, { color: colors.sleepHomeMuted }]}>
         {weather ? `取得 ${formatAcquiredAt(weather.fetchedAt)}` : "保存済み天候なし"}
       </Text>
@@ -282,6 +326,13 @@ function WeatherAction({
       </Text>
     </View>
   );
+}
+
+function pressureChangeLabel(label: string, change?: { changeHpa: number }) {
+  if (!change) return `${label} データ不足`;
+  const prefix = change.changeHpa > 0 ? "+" : "";
+  const arrow = change.changeHpa > 0 ? "↑" : change.changeHpa < 0 ? "↓" : "→";
+  return `${label} ${prefix}${change.changeHpa.toFixed(1)}hPa ${arrow}`;
 }
 
 function ComparisonCard({ rows, minimumRecords, lookbackDays }: { rows: HomeComparisonRow[]; minimumRecords: number; lookbackDays: number }) {
@@ -345,13 +396,15 @@ const styles = StyleSheet.create({
   recordStatusText: { fontSize: 10, lineHeight: 14, fontWeight: "900" },
   topGrid: { flexDirection: "row", alignItems: "flex-start", gap: 9 },
   weatherColumn: { flex: 0.39, minWidth: 0, alignItems: "center", gap: 5 },
-  weatherCircle: { width: "100%", maxWidth: 154, aspectRatio: 1, borderRadius: 999, borderWidth: 1.5, alignItems: "center", justifyContent: "center", padding: 9, overflow: "hidden", elevation: 3, shadowOpacity: 0.14, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } },
-  weatherContent: { minWidth: "86%", alignItems: "center", borderRadius: 18, paddingHorizontal: 6, paddingVertical: 5 },
+  weatherCircle: { width: "100%", maxWidth: 154, aspectRatio: 1, borderRadius: 999, borderWidth: 1.5, alignItems: "center", justifyContent: "center", padding: 7, overflow: "hidden", elevation: 3, shadowOpacity: 0.14, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } },
+  weatherContent: { minWidth: "88%", alignItems: "center", borderRadius: 18, paddingHorizontal: 5, paddingVertical: 3 },
   weatherCondition: { fontSize: 9, lineHeight: 12, fontWeight: "800", textAlign: "center" },
-  temperature: { fontSize: 21, lineHeight: 25, fontWeight: "900", letterSpacing: -0.5 },
-  pressure: { fontSize: 12, lineHeight: 17, fontWeight: "800" },
-  headacheCue: { marginTop: 5, minHeight: 24, borderRadius: 999, flexDirection: "row", alignItems: "center", gap: 3, paddingHorizontal: 7 },
-  headacheCueText: { fontSize: 9, lineHeight: 12, fontWeight: "900" },
+  temperature: { fontSize: 19, lineHeight: 23, fontWeight: "900", letterSpacing: -0.5 },
+  pressure: { fontSize: 11, lineHeight: 15, fontWeight: "800" },
+  pressureChangeBand: { marginTop: 2, width: "100%", minHeight: 22, borderRadius: 9, alignItems: "center", justifyContent: "center", paddingHorizontal: 2 },
+  pressureChangeText: { fontSize: 8, lineHeight: 10, fontWeight: "900", textAlign: "center" },
+  pressureChangeMissing: { marginTop: 4, fontSize: 8, lineHeight: 11, fontWeight: "800", textAlign: "center" },
+  headacheActionHint: { fontSize: 9, lineHeight: 13, fontWeight: "900", textAlign: "center" },
   weatherTime: { fontSize: 9, lineHeight: 13, textAlign: "center" },
   updateButton: { minHeight: 34, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, paddingHorizontal: 8 },
   updateText: { fontSize: 11, lineHeight: 16, fontWeight: "800" },

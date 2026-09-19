@@ -9,6 +9,7 @@ import "@/lib/_core/nativewind-pressable";
 import { ThemeProvider, useThemeContext } from "@/lib/theme-provider";
 import { SleepDataProvider } from "@/lib/sleep-store";
 import { HeadacheEventProvider } from "@/lib/headache-store";
+import { PressureHistoryProvider } from "@/lib/pressure-history-store";
 import {
   SafeAreaFrameContext,
   SafeAreaInsetsContext,
@@ -106,16 +107,18 @@ export default function RootLayout() {
   const content = (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SleepDataProvider>
-        <HeadacheEventProvider>
-          {/* Default to hiding native headers so raw route segments don't appear (e.g. "(tabs)", "products/[id]"). */}
-          {/* If a screen needs the native header, explicitly enable it and set a human title via Stack.Screen options. */}
-          <Stack screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="(tabs)" />
-            <Stack.Screen name="record" options={{ animation: "slide_from_bottom" }} />
-            <Stack.Screen name="menu" options={{ animation: "slide_from_bottom" }} />
-          </Stack>
-          <ThemedStatusBar />
-        </HeadacheEventProvider>
+        <PressureHistoryProvider>
+          <HeadacheEventProvider>
+            {/* Default to hiding native headers so raw route segments don't appear (e.g. "(tabs)", "products/[id]"). */}
+            {/* If a screen needs the native header, explicitly enable it and set a human title via Stack.Screen options. */}
+            <Stack screenOptions={{ headerShown: false }}>
+              <Stack.Screen name="(tabs)" />
+              <Stack.Screen name="record" options={{ animation: "slide_from_bottom" }} />
+              <Stack.Screen name="menu" options={{ animation: "slide_from_bottom" }} />
+            </Stack>
+            <ThemedStatusBar />
+          </HeadacheEventProvider>
+        </PressureHistoryProvider>
       </SleepDataProvider>
     </GestureHandlerRootView>
   );
