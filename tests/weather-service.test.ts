@@ -2,7 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   buildOpenMeteoUrl,
+  buildOpenMeteoPressureHistoryUrl,
   fetchCurrentWeather,
+  fetchRecentSurfacePressureHistory,
   requestCurrentCoordinates,
   weatherCodeToJapanese,
 } from "../lib/weather-service";
@@ -14,6 +16,15 @@ describe("Open-Meteo weather service", () => {
     expect(url.searchParams.get("current")).toBe("temperature_2m,surface_pressure,weather_code");
     expect(url.searchParams.get("latitude")).toBe("35.6812");
     expect(url.searchParams.get("longitude")).toBe("139.7671");
+    expect(url.searchParams.get("timeformat")).toBe("unixtime");
+  });
+
+  it("requests a two-day hourly surface-pressure series without changing the current-weather request", () => {
+    const url = new URL(buildOpenMeteoPressureHistoryUrl({ latitude: 35.6812, longitude: 139.7671 }));
+    expect(url.origin + url.pathname).toBe("https://api.open-meteo.com/v1/forecast");
+    expect(url.searchParams.get("current")).toBe("surface_pressure");
+    expect(url.searchParams.get("hourly")).toBe("surface_pressure");
+    expect(url.searchParams.get("past_days")).toBe("2");
     expect(url.searchParams.get("timeformat")).toBe("unixtime");
   });
 
@@ -63,5 +74,40 @@ describe("Open-Meteo weather service", () => {
   it("rejects incomplete API data instead of saving an uncertain value", async () => {
     const fetcher = vi.fn(async () => new Response(JSON.stringify({ current: { time: 1789257600, temperature_2m: 22 } }), { status: 200 }));
     await expect(fetchCurrentWeather({ latitude: 35, longitude: 139 }, fetcher)).rejects.toMatchObject({ code: "invalid-response" });
+  });
+
+  it("keeps only available hourly pressure points and does not return coordinates", async () => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({
+      current: { time: 1789257600 },
+      hourly: {
+        time: [1789171200, 1789257600, 1789261200],
+        surface_pressure: [1005.24, 1003.86, 1001.12],
+      },
+    }), { status: 200 }));
+
+    const history = await fetchRecentSurfacePressureHistory(
+      { latitude: 35, longitude: 139 },
+      fetcher,
+      () => new Date("2026-09-13T01:30:00.000Z"),
+    );
+    expect(history.latestAvailableAt).toBe("2026-09-13T00:00:00.000Z");
+    expect(history.points).toEqual([
+      expect.objectContaining({ observedAt: "2026-09-12T00:00:00.000Z", pressureHpa: 1005.2 }),
+      expect.objectContaining({ observedAt: "2026-09-13T00:00:00.000Z", pressureHpa: 1003.9 }),
+    ]);
+    expect(history).not.toHaveProperty("latitude");
+    expect(history).not.toHaveProperty("longitude");
+  });
+
+  it("rejects failed and malformed pressure-history responses without a storage side effect", async () => {
+    await expect(fetchRecentSurfacePressureHistory(
+      { latitude: 35, longitude: 139 },
+      vi.fn(async () => { throw new TypeError("offline"); }),
+    )).rejects.toMatchObject({ code: "network" });
+
+    await expect(fetchRecentSurfacePressureHistory(
+      { latitude: 35, longitude: 139 },
+      vi.fn(async () => new Response(JSON.stringify({ current: { time: 1789257600 }, hourly: { time: [], surface_pressure: [1000] } }), { status: 200 })),
+    )).rejects.toMatchObject({ code: "invalid-response" });
   });
 });

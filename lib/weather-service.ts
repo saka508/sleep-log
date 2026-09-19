@@ -1,4 +1,5 @@
 import type { WeatherSnapshot } from "./sleep-utils";
+import { PRESSURE_HISTORY_SOURCE, type PressureHistoryPoint } from "./pressure-history";
 
 export const OPEN_METEO_ATTRIBUTION_URL = "https://open-meteo.com/";
 const OPEN_METEO_FORECAST_URL = "https://api.open-meteo.com/v1/forecast";
@@ -53,6 +54,24 @@ export function buildOpenMeteoUrl({ latitude, longitude }: Coordinates) {
   return `${OPEN_METEO_FORECAST_URL}?${params.toString()}`;
 }
 
+/**
+ * Builds an in-memory-only history request. The caller must discard exact
+ * coordinates after the request; this module never returns them.
+ */
+export function buildOpenMeteoPressureHistoryUrl({ latitude, longitude }: Coordinates) {
+  const params = new URLSearchParams({
+    latitude: String(latitude),
+    longitude: String(longitude),
+    current: "surface_pressure",
+    hourly: "surface_pressure",
+    past_days: "2",
+    forecast_days: "1",
+    timezone: "auto",
+    timeformat: "unixtime",
+  });
+  return `${OPEN_METEO_FORECAST_URL}?${params.toString()}`;
+}
+
 export function requestCurrentCoordinates(provider?: GeolocationProvider): Promise<Coordinates> {
   const geolocation = provider ?? (typeof navigator !== "undefined" ? navigator.geolocation : undefined);
   if (!geolocation) {
@@ -100,6 +119,68 @@ export async function fetchCurrentWeather(coordinates: Coordinates, fetcher: Fet
     observedAt: new Date(observedAtSeconds * 1000).toISOString(),
     fetchedAt: new Date().toISOString(),
     source: "Open-Meteo",
+  };
+}
+
+export type RecentPressureHistory = {
+  fetchedAt: string;
+  latestAvailableAt: string;
+  points: PressureHistoryPoint[];
+};
+
+/**
+ * Fetches only the current request's hourly surface-pressure history. It has
+ * no AsyncStorage or UI side effect, and it never includes coordinates in the
+ * returned value. Future persistence needs its own approved location policy.
+ */
+export async function fetchRecentSurfacePressureHistory(
+  coordinates: Coordinates,
+  fetcher: FetchProvider = fetch,
+  now = () => new Date(),
+): Promise<RecentPressureHistory> {
+  let response: Response;
+  try {
+    response = await fetcher(buildOpenMeteoPressureHistoryUrl(coordinates), { headers: { Accept: "application/json" } });
+  } catch {
+    throw new WeatherError("network", "気圧履歴を取得できませんでした。通信状態を確認してください。");
+  }
+  if (!response.ok) {
+    throw new WeatherError("network", "気圧履歴を取得できませんでした。しばらくしてから、もう一度お試しください。");
+  }
+
+  const body = await response.json() as {
+    current?: { time?: unknown };
+    hourly?: { time?: unknown; surface_pressure?: unknown };
+  };
+  const latestAvailableSeconds = Number(body.current?.time);
+  const timestamps = body.hourly?.time;
+  const pressures = body.hourly?.surface_pressure;
+  if (!Number.isFinite(latestAvailableSeconds) || !Array.isArray(timestamps) || !Array.isArray(pressures) || timestamps.length !== pressures.length) {
+    throw new WeatherError("invalid-response", "気圧履歴の応答を読み取れませんでした。しばらくしてから、もう一度お試しください。");
+  }
+
+  // The hourly payload also contains forecast hours. Keep only timestamps the
+  // API marks as already available through its current-data timestamp.
+  const points = timestamps.flatMap((timestamp, index): PressureHistoryPoint[] => {
+    const observedAtSeconds = Number(timestamp);
+    const pressureHpa = Number(pressures[index]);
+    if (!Number.isFinite(observedAtSeconds) || !Number.isFinite(pressureHpa) || observedAtSeconds > latestAvailableSeconds) return [];
+    return [{
+      observedAt: new Date(observedAtSeconds * 1000).toISOString(),
+      pressureHpa: Math.round(pressureHpa * 10) / 10,
+      pressureKind: "surface_pressure",
+      locationScope: "current-location",
+      source: PRESSURE_HISTORY_SOURCE,
+    }];
+  });
+  if (!points.length) {
+    throw new WeatherError("invalid-response", "利用できる気圧履歴がありませんでした。しばらくしてから、もう一度お試しください。");
+  }
+
+  return {
+    fetchedAt: now().toISOString(),
+    latestAvailableAt: new Date(latestAvailableSeconds * 1000).toISOString(),
+    points,
   };
 }
 
