@@ -3,7 +3,7 @@ import { Alert, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { ConditionTrendChart } from "@/components/condition-trend-chart";
 import { PressureHistoryChart } from "@/components/pressure-history-chart";
-import { AppTextInput, Card, ChoicePills, MetricCard, PageHeader, PrimaryButton, SectionLabel, SmallStatus, ToggleRow } from "@/components/sleep-ui";
+import { AppTextInput, Card, ChoicePills, MetricCard, PageHeader, PrimaryButton, SectionLabel, SegmentedControl, SmallStatus, ToggleRow } from "@/components/sleep-ui";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { analyzeRelation, assessAnalysisQuality, buildSleepRecommendation, buildTrend, formatAnalysisMetric, getAnalysisMetricLabel, MIN_RECOMMENDATION_SLEEP_MINUTES, summarizeTrend, type AnalysisGranularity, type AnalysisMetric, type AnalysisQuality, type RelationKey } from "@/lib/condition-analysis";
@@ -98,13 +98,14 @@ export default function AnalysisScreen() {
 
   return (
     <ScreenContainer>
+      <View style={[styles.analysisSurface, { backgroundColor: colors.background }]}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <PageHeader title="詳細分析" subtitle="個人記録を日付順に振り返る" />
 
         <Card style={styles.periodCard}>
           <View style={styles.periodHeader}><Text style={[styles.periodTitle, { color: colors.foreground }]}>表示期間</Text><SmallStatus label={`${personalRecords.length} 日を分析`} tone="muted" /></View>
-          <ChoicePills value={granularity} onChange={setGranularity} options={[{ value: "day", label: "日別" }, { value: "week", label: "週別" }, { value: "month", label: "月別" }]} />
-          <Text style={[styles.periodNote, { color: colors.muted }]}>期間を変えると、グラフ・平均・品質情報を記録から再計算します。</Text>
+          <SegmentedControl value={granularity} onChange={setGranularity} options={[{ value: "day", label: "日別" }, { value: "week", label: "週別" }, { value: "month", label: "月別" }]} />
+          <Text style={[styles.periodNote, { color: colors.muted }]}>切替で再計算</Text>
         </Card>
 
         <SectionLabel title="現在のまとめ" action={<SmallStatus label={quality.statusLabel} tone={quality.status === "sufficient" ? "success" : quality.status === "partial" || quality.status === "reference" ? "warning" : "muted"} />} />
@@ -116,7 +117,7 @@ export default function AnalysisScreen() {
         </View>
 
         <SectionLabel title="項目別に見る" />
-        <ChoicePills value={category} onChange={setCategory} options={[{ value: "sleep", label: "睡眠" }, { value: "condition", label: "体調" }, { value: "headache", label: "頭痛" }, { value: "environment", label: "環境" }]} />
+        <SegmentedControl value={category} onChange={setCategory} options={[{ value: "sleep", label: "睡眠" }, { value: "condition", label: "体調" }, { value: "headache", label: "頭痛" }, { value: "environment", label: "環境" }]} />
         {category === "sleep" ? <SleepPanel trends={categoryTrends} records={personalRecords} granularity={granularity} metric={metric} setMetric={setMetric} summary={summarizeTrend(categoryTrends.sleep)} colors={colors} /> : null}
         {category === "condition" ? <ConditionPanel trends={categoryTrends} colors={colors} /> : null}
         {category === "headache" ? <HeadachePanel events={headacheEvents} dailyHeadacheDays={dailyHeadacheDays} personalRecords={personalRecords} trends={categoryTrends} colors={colors} /> : null}
@@ -152,6 +153,7 @@ export default function AnalysisScreen() {
 
         <View style={[styles.disclaimer, { backgroundColor: `${colors.muted}12` }]}><Text style={[styles.disclaimerText, { color: colors.muted }]}>この分析は個人記録の振り返りであり、診断ではありません。気になる症状が続く場合は、保護者や医療機関に相談してください。</Text></View>
       </ScrollView>
+      </View>
     </ScreenContainer>
   );
 }
@@ -160,7 +162,7 @@ type AnalysisCategory = "sleep" | "condition" | "headache" | "environment";
 
 function SummaryValue({ label, value, accent }: { label: string; value: string; accent: string }) {
   const colors = useColors();
-  return <View style={[styles.summaryValue, { backgroundColor: `${accent}12`, borderColor: `${accent}30` }]}><Text style={[styles.summaryLabel, { color: colors.muted }]}>{label}</Text><Text style={[styles.summaryNumber, { color: colors.foreground }]}>{value}</Text></View>;
+  return <View style={[styles.summaryValue, { backgroundColor: `${accent}12`, borderColor: `${accent}30` }]}><Text style={[styles.summaryLabel, { color: colors.sleepHomeMuted }]}>{label}</Text><Text style={[styles.summaryNumber, { color: colors.sleepHomeForeground }]}>{value}</Text></View>;
 }
 
 type CategoryTrends = {
@@ -264,6 +266,7 @@ function QualityValue({ label, value }: { label: string; value: string }) {
 }
 
 const styles = StyleSheet.create({
+  analysisSurface: { flex: 1 },
   content: { paddingHorizontal: 14, paddingTop: 10, paddingBottom: 24, gap: 11 },
   periodCard: { gap: 10, paddingHorizontal: 14, paddingVertical: 14 },
   periodHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 8 },
