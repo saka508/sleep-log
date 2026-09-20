@@ -10,11 +10,12 @@ import { LocalDatePicker, LocalTimePicker } from "@/components/local-date-time-p
 import { useColors } from "@/hooks/use-colors";
 import { createHeadacheEventId, localDateTimeToIso, type HeadacheEventWeatherSnapshot } from "@/lib/headache-events";
 import { useHeadacheEvents } from "@/lib/headache-store";
+import { requestCurrentCoordinates } from "@/lib/location-service";
 import { createPressureHistoryBatch } from "@/lib/pressure-history";
 import { usePressureHistory } from "@/lib/pressure-history-store";
 import { useSleepData } from "@/lib/sleep-store";
 import { formatAcquiredAt, HEADACHE_FEATURE_OPTIONS, todayKey, type HeadacheFeature } from "@/lib/sleep-utils";
-import { fetchCurrentWeather, fetchRecentSurfacePressureHistory, OPEN_METEO_ATTRIBUTION_URL, requestCurrentCoordinates, WeatherError } from "@/lib/weather-service";
+import { fetchCurrentWeather, fetchRecentSurfacePressureHistory, OPEN_METEO_ATTRIBUTION_URL, WeatherError } from "@/lib/weather-service";
 
 type SeverityChoice = "none" | "record";
 
@@ -78,7 +79,7 @@ function HeadacheEventForm() {
     setWeatherLoading(true);
     setWeatherMessage("現在地から天候を取得しています…");
     try {
-      const coordinates = await requestCurrentCoordinates();
+      const coordinates = await requestCurrentCoordinates("manual");
       const [weatherResult, historyResult] = await Promise.allSettled([
         fetchCurrentWeather(coordinates),
         fetchRecentSurfacePressureHistory(coordinates),

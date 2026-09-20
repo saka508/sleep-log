@@ -77,6 +77,9 @@ importers:
       expo-linking:
         specifier: ~57.0.9
         version: 57.0.9(expo@57.0.21)(react-native@0.86.3(@babel/core@7.28.5)(@react-native/metro-config@0.86.3(@babel/core@7.28.5))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3)
+      expo-location:
+        specifier: ~57.0.19
+        version: 57.0.19(expo@57.0.21)(typescript@6.0.3)
       expo-notifications:
         specifier: ~57.0.17
         version: 57.0.17(expo@57.0.21)(react-native@0.86.3(@babel/core@7.28.5)(@react-native/metro-config@0.86.3(@babel/core@7.28.5))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3)(typescript@6.0.3)
@@ -3459,6 +3462,11 @@ packages:
     peerDependencies:
       react: '*'
       react-native: '*'
+
+  expo-location@57.0.19:
+    resolution: {integrity: sha512-eNX8D74Aav4Go0jmNQIuIP3ioV6QLNDsKuEXE24rtqoG80UgqgD0gjnwwWqkC5fs7yGUToXcy4BLqlwCqrX5pQ==}
+    peerDependencies:
+      expo: '*'
 
   expo-modules-autolinking@57.0.12:
     resolution: {integrity: sha512-Q8KAlq37nLKsQ+HsS9NpQVpd5jCgqtu694TDUNHBUBpV9ViD82mRBh8Uug/h68RG9xnLS+kuL4nYaCuFRghHjg==}
@@ -9354,6 +9362,14 @@ snapshots:
     transitivePeerDependencies:
       - expo
       - supports-color
+
+  expo-location@57.0.19(expo@57.0.21)(typescript@6.0.3):
+    dependencies:
+      '@expo/image-utils': 0.11.5(typescript@6.0.3)
+      expo: 57.0.21(@babel/core@7.28.5)(@expo/dom-webview@57.0.1)(@expo/metro-runtime@57.0.15)(expo-router@57.0.20)(react-dom@19.2.3(react@19.2.3))(react-native-web@0.21.2(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(react-native-worklets@0.10.1(@babel/core@7.28.5)(@react-native/metro-config@0.86.3(@babel/core@7.28.5))(react-native@0.86.3(@babel/core@7.28.5)(@react-native/metro-config@0.86.3(@babel/core@7.28.5))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3))(react-native@0.86.3(@babel/core@7.28.5)(@react-native/metro-config@0.86.3(@babel/core@7.28.5))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3)(typescript@6.0.3)
+    transitivePeerDependencies:
+      - supports-color
+      - typescript
 
   expo-modules-autolinking@57.0.12(typescript@6.0.3):
     dependencies:

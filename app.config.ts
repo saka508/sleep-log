@@ -110,6 +110,13 @@ const config: ExpoConfig = {
       }
     ],
     [
+      "expo-location",
+      {
+        isAndroidBackgroundLocationEnabled: false,
+        isAndroidForegroundServiceEnabled: false,
+      },
+    ],
+    [
       "expo-splash-screen",
       {
         image: "./assets/images/splash-icon.png",
