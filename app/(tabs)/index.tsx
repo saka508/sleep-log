@@ -10,11 +10,12 @@ import { WeatherCircleScene } from "@/components/weather-circle-scene";
 import { useColors } from "@/hooks/use-colors";
 import { buildHomeComparison, type HomeComparisonRow } from "@/lib/home-summary";
 import { homeWeatherStatusMessage, type HomeWeatherStatus } from "@/lib/home-weather";
+import { hasForegroundLocationPermission, requestCurrentCoordinates } from "@/lib/location-service";
 import { calculatePressureChangesForBatch, createPressureHistoryBatch, isPressureHistoryStale, type PressureHistoryBatch } from "@/lib/pressure-history";
 import { usePressureHistory } from "@/lib/pressure-history-store";
 import { useSleepData } from "@/lib/sleep-store";
 import { formatAcquiredAt, formatDate, todayKey, type WeatherSnapshot } from "@/lib/sleep-utils";
-import { fetchCurrentWeather, fetchRecentSurfacePressureHistory, requestCurrentCoordinates, WeatherError, type WeatherErrorCode } from "@/lib/weather-service";
+import { fetchCurrentWeather, fetchRecentSurfacePressureHistory, WeatherError, type WeatherErrorCode } from "@/lib/weather-service";
 import { weatherIconNameFromCode } from "@/lib/weather-visual";
 
 type MaterialIconName = ComponentProps<typeof MaterialIcons>["name"];
@@ -59,7 +60,7 @@ export default function TodayScreen() {
     setWeatherStatus("updating");
     setWeatherErrorCode(undefined);
     try {
-      const coordinates = await requestCurrentCoordinates();
+      const coordinates = await requestCurrentCoordinates(mode);
       const [weatherResult, historyResult] = await Promise.allSettled([
         fetchCurrentWeather(coordinates),
         fetchRecentSurfacePressureHistory(coordinates),
@@ -91,11 +92,10 @@ export default function TodayScreen() {
   useEffect(() => {
     const latestBatch = pressureBatches[0];
     if (!latestBatch || !pressureHistoryReady || !isPressureHistoryStale(latestBatch.fetchedAt, 60 * 60 * 1000)) return;
-    if (typeof navigator === "undefined" || !navigator.permissions?.query) return;
     let active = true;
-    void navigator.permissions.query({ name: "geolocation" as PermissionName }).then((permission) => {
-      if (active && permission.state === "granted") void updateWeather("automatic");
-    }).catch(() => undefined);
+    void hasForegroundLocationPermission().then((granted) => {
+      if (active && granted) void updateWeather("automatic");
+    });
     return () => { active = false; };
   }, [pressureBatches, pressureHistoryReady, updateWeather]);
 
