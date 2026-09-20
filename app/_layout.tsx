@@ -115,6 +115,7 @@ export default function RootLayout() {
               <Stack.Screen name="(tabs)" />
               <Stack.Screen name="record" options={{ animation: "slide_from_bottom" }} />
               <Stack.Screen name="menu" options={{ animation: "slide_from_bottom" }} />
+              <Stack.Screen name="advanced-analysis" options={{ animation: "slide_from_right" }} />
             </Stack>
             <ThemedStatusBar />
           </HeadacheEventProvider>

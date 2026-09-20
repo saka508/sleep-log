@@ -10,10 +10,11 @@ import { todayKey } from "@/lib/sleep-utils";
 
 type IconName = ComponentProps<typeof MaterialIcons>["name"];
 
-const MENU_ITEMS: { label: string; detail: string; icon: IconName; route: "/headache-event" | "/history" | "/analysis" | "/settings" }[] = [
+const MENU_ITEMS: { label: string; detail: string; icon: IconName; route: "/headache-event" | "/history" | "/analysis" | "/advanced-analysis" | "/settings" }[] = [
   { label: "頭痛イベント", detail: "発生時刻・強さ・その時点の天候を記録", icon: "healing", route: "/headache-event" },
   { label: "過去の記録・履歴", detail: "日付ごとの記録を確認・編集", icon: "calendar-month", route: "/history" },
-  { label: "詳細分析", detail: "推移・関係性・データ品質を確認", icon: "insights", route: "/analysis" },
+  { label: "詳細分析", detail: "睡眠・体調・頭痛・環境を確認", icon: "insights", route: "/analysis" },
+  { label: "高度な分析", detail: "関連分析・データ品質・参考指標（準備中）", icon: "analytics", route: "/advanced-analysis" },
   { label: "設定", detail: "バックアップ・復元・表示設定", icon: "settings", route: "/settings" },
 ];
 
@@ -45,7 +46,7 @@ export default function MenuScreen() {
             <Pressable
               key={item.route}
               accessibilityRole="button"
-              onPress={() => router.push(item.route)}
+              onPress={() => router.push(item.route as never)}
               style={({ pressed }) => [styles.item, { backgroundColor: colors.surface, borderColor: colors.border }, pressed && styles.pressed]}
             >
               <View style={[styles.icon, { backgroundColor: `${colors.primary}13` }]}>
