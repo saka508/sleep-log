@@ -1,9 +1,9 @@
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import { Alert, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { ConditionTrendChart } from "@/components/condition-trend-chart";
 import { PressureHistoryChart } from "@/components/pressure-history-chart";
-import { AppTextInput, Card, ChoicePills, MetricCard, PageHeader, PrimaryButton, SectionLabel, SegmentedControl, SmallStatus, ToggleRow } from "@/components/sleep-ui";
+import { AppTextInput, Card, ChoicePills, MetricCard, PageHeader, PrimaryButton, SegmentedControl, SmallStatus, ToggleRow } from "@/components/sleep-ui";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { analyzeRelation, assessAnalysisQuality, buildSleepRecommendation, buildTrend, formatAnalysisMetric, getAnalysisMetricLabel, MIN_RECOMMENDATION_SLEEP_MINUTES, summarizeTrend, type AnalysisGranularity, type AnalysisMetric, type AnalysisQuality, type RelationKey } from "@/lib/condition-analysis";
@@ -100,15 +100,15 @@ export default function AnalysisScreen() {
     <ScreenContainer>
       <View style={[styles.analysisSurface, { backgroundColor: colors.background }]}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-        <PageHeader title="詳細分析" subtitle="個人記録を日付順に振り返る" />
+        <PageHeader title="詳細分析" />
 
         <Card style={styles.periodCard}>
-          <View style={styles.periodHeader}><Text style={[styles.periodTitle, { color: colors.foreground }]}>表示期間</Text><SmallStatus label={`${personalRecords.length} 日を分析`} tone="muted" /></View>
+          <View style={styles.periodHeader}><Text style={[styles.periodTitle, { color: colors.foreground }]}>表示期間</Text><SmallStatus label={`${personalRecords.length}日`} tone="muted" /></View>
           <SegmentedControl value={granularity} onChange={setGranularity} options={[{ value: "day", label: "日別" }, { value: "week", label: "週別" }, { value: "month", label: "月別" }]} />
           <Text style={[styles.periodNote, { color: colors.muted }]}>切替で再計算</Text>
         </Card>
 
-        <SectionLabel title="現在のまとめ" action={<SmallStatus label={quality.statusLabel} tone={quality.status === "sufficient" ? "success" : quality.status === "partial" || quality.status === "reference" ? "warning" : "muted"} />} />
+        <AnalysisSectionLabel title="現在のまとめ" action={<SmallStatus label={quality.statusLabel} tone={quality.status === "sufficient" ? "success" : quality.status === "partial" || quality.status === "reference" ? "warning" : "muted"} />} />
         <View style={styles.summaryGrid}>
           <SummaryValue label="睡眠" value={formatAnalysisMetric("sleepMinutes", summarizeTrend(categoryTrends.sleep).average)} accent={colors.sleepBlue} />
           <SummaryValue label="眠気" value={formatAnalysisMetric("sleepiness", summarizeTrend(categoryTrends.sleepiness).average)} accent={colors.sleepForest} />
@@ -116,7 +116,7 @@ export default function AnalysisScreen() {
           <SummaryValue label="頭痛日" value={personalRecords.length ? `${dailyHeadacheDays} / ${personalRecords.length}日` : "データなし"} accent={colors.sleepHeadache} />
         </View>
 
-        <SectionLabel title="項目別に見る" />
+        <AnalysisSectionLabel title="項目別に見る" />
         <SegmentedControl value={category} onChange={setCategory} options={[{ value: "sleep", label: "睡眠" }, { value: "condition", label: "体調" }, { value: "headache", label: "頭痛" }, { value: "environment", label: "環境" }]} />
         {category === "sleep" ? <SleepPanel trends={categoryTrends} records={personalRecords} granularity={granularity} metric={metric} setMetric={setMetric} summary={summarizeTrend(categoryTrends.sleep)} colors={colors} /> : null}
         {category === "condition" ? <ConditionPanel trends={categoryTrends} colors={colors} /> : null}
@@ -159,6 +159,11 @@ export default function AnalysisScreen() {
 }
 
 type AnalysisCategory = "sleep" | "condition" | "headache" | "environment";
+
+function AnalysisSectionLabel({ title, action }: { title: string; action?: ReactNode }) {
+  const colors = useColors();
+  return <View style={styles.compactSectionHeader}><Text style={[styles.compactSectionTitle, { color: colors.foreground }]}>{title}</Text>{action}</View>;
+}
 
 function SummaryValue({ label, value, accent }: { label: string; value: string; accent: string }) {
   const colors = useColors();
@@ -267,15 +272,17 @@ function QualityValue({ label, value }: { label: string; value: string }) {
 
 const styles = StyleSheet.create({
   analysisSurface: { flex: 1 },
-  content: { paddingHorizontal: 14, paddingTop: 10, paddingBottom: 24, gap: 11 },
-  periodCard: { gap: 10, paddingHorizontal: 14, paddingVertical: 14 },
+  content: { paddingHorizontal: 12, paddingTop: 4, paddingBottom: 18, gap: 6 },
+  periodCard: { gap: 5, paddingHorizontal: 10, paddingVertical: 8 },
   periodHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 8 },
-  periodTitle: { fontSize: 16, lineHeight: 22, fontWeight: "900" },
-  periodNote: { fontSize: 11, lineHeight: 16 },
+  periodTitle: { fontSize: 14, lineHeight: 19, fontWeight: "900" },
+  periodNote: { fontSize: 10, lineHeight: 14 },
+  compactSectionHeader: { minHeight: 22, flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 8 },
+  compactSectionTitle: { fontSize: 15, lineHeight: 20, fontWeight: "900" },
   summaryGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  summaryValue: { width: "48%", minHeight: 70, borderRadius: 14, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 10, justifyContent: "center", gap: 3 },
-  summaryLabel: { fontSize: 11, lineHeight: 15, fontWeight: "800" },
-  summaryNumber: { fontSize: 18, lineHeight: 24, fontWeight: "900" },
+  summaryValue: { width: "48%", minHeight: 58, borderRadius: 12, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 7, justifyContent: "center", gap: 1 },
+  summaryLabel: { fontSize: 10, lineHeight: 14, fontWeight: "800" },
+  summaryNumber: { fontSize: 16, lineHeight: 21, fontWeight: "900" },
   panelCard: { gap: 12, paddingHorizontal: 14, paddingVertical: 15 },
   panelTitle: { fontSize: 17, lineHeight: 23, fontWeight: "900" },
   chartCard: { gap: 13, paddingHorizontal: 14, paddingVertical: 16 },
