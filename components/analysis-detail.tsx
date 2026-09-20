@@ -119,6 +119,7 @@ export default function AnalysisDetailScreen() {
 
   if (!isReady || !headacheEventsReady || !pressureHistoryReady) return <ScreenContainer />;
   return <ScreenContainer>
+    <View style={[styles.surface, { backgroundColor: colors.background }]}>
     <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <PageHeader title={CATEGORY_TITLES[category]} subtitle="分析トップから選んだ項目を詳しく表示" action={<PrimaryButton label="分析トップ" secondary onPress={() => router.back()} />} />
       <Card style={styles.periodCard}><View style={styles.periodHeader}><Text style={[styles.periodTitle, { color: colors.foreground }]}>表示期間</Text><SmallStatus label={`${personalRecords.length}日`} tone="muted" /></View><SegmentedControl value={granularity} onChange={setGranularity} options={[{ value: "day", label: "日別" }, { value: "week", label: "週別" }, { value: "month", label: "月別" }]} /></Card>
@@ -131,6 +132,7 @@ export default function AnalysisDetailScreen() {
       {category === "sleep" ? <SleepRecommendation recommendation={recommendation} settings={settings} updateSettings={updateSettings} bedTime={bedTime} wakeTime={wakeTime} sleepMinutes={sleepMinutes} setBedTime={setBedTime} setWakeTime={setWakeTime} setSleepMinutes={setSleepMinutes} toggleRecommendation={toggleRecommendation} saveOverrides={saveOverrides} isSavingRecommendation={isSavingRecommendation} /> : null}
       <View style={[styles.disclaimer, { backgroundColor: `${colors.muted}12` }]}><Text style={[styles.disclaimerText, { color: colors.muted }]}>この分析は個人記録の振り返りであり、診断ではありません。</Text></View>
     </ScrollView>
+    </View>
   </ScreenContainer>;
 }
 
@@ -144,6 +146,7 @@ function SleepRecommendation({ recommendation, settings, updateSettings, bedTime
 }
 
 const styles = StyleSheet.create({
+  surface: { flex: 1 },
   content: { paddingHorizontal: 14, paddingTop: 8, paddingBottom: 28, gap: 11 },
   periodCard: { gap: 8, paddingHorizontal: 12, paddingVertical: 11 },
   periodHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
