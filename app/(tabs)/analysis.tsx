@@ -23,6 +23,8 @@ export default function AnalysisScreen() {
   const router = useRouter();
   const { records, isReady } = useSleepData();
   const [granularity, setGranularity] = useState<AnalysisGranularity>("day");
+  const [viewportHeight, setViewportHeight] = useState(0);
+  const [contentHeight, setContentHeight] = useState(0);
   const personalRecords = useMemo(() => records.filter((record) => !record.isSample), [records]);
   const summaryTrends = useMemo(() => ({
     sleep: summarizeTrend(buildTrend(records, "sleepMinutes", granularity)),
@@ -38,7 +40,16 @@ export default function AnalysisScreen() {
   if (!isReady) return <ScreenContainer />;
   return <ScreenContainer>
     <View style={[styles.analysisSurface, { backgroundColor: colors.background }]}>
-      <ScrollView contentContainerStyle={styles.topContent} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={[styles.topContent, { flexGrow: 1 }]}
+        showsVerticalScrollIndicator={contentHeight > viewportHeight + 2}
+        scrollEnabled={viewportHeight === 0 || contentHeight > viewportHeight + 2}
+        onLayout={(event) => setViewportHeight(event.nativeEvent.layout.height)}
+        onContentSizeChange={(_, height) => setContentHeight(height)}
+        bounces={false}
+        alwaysBounceVertical={false}
+        overScrollMode="never"
+      >
         <PageHeader title="詳細分析" />
         <Card style={styles.periodCard}>
           <View style={styles.periodHeader}><Text style={[styles.periodTitle, { color: colors.foreground }]}>表示期間</Text><SmallStatus label={`${personalRecords.length}日`} tone="muted" /></View>
@@ -110,7 +121,16 @@ export function SleepPanel({ trends, records, granularity, metric, setMetric, su
 }
 
 export function ConditionPanel({ trends, colors }: { trends: CategoryTrends; colors: ReturnType<typeof useColors> }) {
-  return <Card style={styles.panelCard}><Text style={[styles.panelTitle, { color: colors.foreground }]}>主観状態の推移</Text><TrendBars points={trends.sleepiness} formatValue={(value) => `${value.toFixed(1)} / 10`} accent={colors.sleepBlue} title="眠気" /><TrendBars points={trends.fatigue} formatValue={(value) => `${value.toFixed(1)} / 10`} accent={colors.warning} title="疲労" /><TrendBars points={trends.clarity} formatValue={(value) => `${value.toFixed(1)} / 10`} accent={colors.sleepForest} title="頭の冴え" /><TrendBars points={trends.muscleFatigue} formatValue={(value) => `${value.toFixed(1)} / 10`} accent={colors.sleepHeadache} title="筋肉疲労" /></Card>;
+  const sections = [
+    { key: "sleepiness", title: "眠気", points: trends.sleepiness, accent: colors.sleepBlue },
+    { key: "fatigue", title: "疲労", points: trends.fatigue, accent: colors.warning },
+    { key: "clarity", title: "頭の冴え", points: trends.clarity, accent: colors.sleepForest },
+    { key: "muscleFatigue", title: "筋肉疲労", points: trends.muscleFatigue, accent: colors.sleepHeadache },
+  ].filter((section) => section.points.some((point) => point.value !== null));
+  if (!sections.length) {
+    return <View style={[styles.compactEmpty, { backgroundColor: colors.surface, borderColor: colors.border }]}><Text style={[styles.compactEmptyTitle, { color: colors.foreground }]}>この期間の体調記録はありません</Text><Text style={[styles.compactEmptyNote, { color: colors.muted }]}>眠気・疲労・頭の冴え・筋肉疲労を記録すると、ここに推移が表示されます。</Text></View>;
+  }
+  return <Card style={styles.panelCard}><Text style={[styles.panelTitle, { color: colors.foreground }]}>主観状態の推移</Text>{sections.map((section) => <TrendBars key={section.key} points={section.points} formatValue={(value) => `${value.toFixed(1)} / 10`} accent={section.accent} title={section.title} />)}{sections.length < 4 ? <Text style={[styles.note, { color: colors.muted }]}>未入力の項目は表示していません。</Text> : null}</Card>;
 }
 
 export function HeadachePanel({ events, dailyHeadacheDays, personalRecords, trends, colors }: { events: import("@/lib/headache-events").HeadacheEvent[]; dailyHeadacheDays: number; personalRecords: SleepRecord[]; trends: CategoryTrends; colors: ReturnType<typeof useColors> }) {
@@ -205,6 +225,9 @@ const styles = StyleSheet.create({
   categoryTitle: { fontSize: 14, lineHeight: 19, fontWeight: "900" },
   categoryDescription: { fontSize: 11, lineHeight: 15 },
   pressed: { opacity: 0.74, transform: [{ scale: 0.99 }] },
+  compactEmpty: { borderRadius: 14, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 14, gap: 4 },
+  compactEmptyTitle: { fontSize: 15, lineHeight: 21, fontWeight: "800" },
+  compactEmptyNote: { fontSize: 12, lineHeight: 18 },
   panelCard: { gap: 12, paddingHorizontal: 14, paddingVertical: 15 },
   panelTitle: { fontSize: 17, lineHeight: 23, fontWeight: "900" },
   chartCard: { gap: 13, paddingHorizontal: 14, paddingVertical: 16 },
