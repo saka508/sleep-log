@@ -74,6 +74,13 @@ export default function AnalysisDetailScreen() {
   const quality = useMemo(() => assessAnalysisQuality(records, metric, granularity, relations), [records, metric, granularity, relations]);
   const latestPressureBatch = batches[0];
   const latestPressureChanges = useMemo(() => latestPressureBatch ? calculatePressureChangesForBatch(latestPressureBatch) : {}, [latestPressureBatch]);
+  const caffeineRecords = useMemo(() => personalRecords.filter((record) => record.caffeine && record.caffeineTime), [personalRecords]);
+  const categoryHasData = useMemo(() => {
+    if (category === "sleep") return trends.sleep.some((point) => point.value !== null);
+    if (category === "condition") return [trends.sleepiness, trends.fatigue, trends.clarity, trends.muscleFatigue].some((points) => points.some((point) => point.value !== null));
+    if (category === "headache") return personalRecords.some((record) => record.headache) || events.length > 0;
+    return Boolean(latestPressureBatch) || caffeineRecords.length > 0;
+  }, [category, trends, personalRecords, events.length, latestPressureBatch, caffeineRecords.length]);
   const recommendation = useMemo(() => buildSleepRecommendation(records), [records]);
   const [bedTimeOverride, setBedTime] = useState<string | null>(null);
   const [wakeTimeOverride, setWakeTime] = useState<string | null>(null);
@@ -123,10 +130,12 @@ export default function AnalysisDetailScreen() {
     <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <PageHeader title={CATEGORY_TITLES[category]} subtitle="分析トップから選んだ項目を詳しく表示" action={<PrimaryButton label="分析トップ" secondary onPress={() => router.back()} />} />
       <Card style={styles.periodCard}><View style={styles.periodHeader}><Text style={[styles.periodTitle, { color: colors.foreground }]}>表示期間</Text><SmallStatus label={`${personalRecords.length}日`} tone="muted" /></View><SegmentedControl value={granularity} onChange={setGranularity} options={[{ value: "day", label: "日別" }, { value: "week", label: "週別" }, { value: "month", label: "月別" }]} /></Card>
-      {category === "sleep" ? <SleepPanel trends={trends} records={personalRecords} granularity={granularity} metric={metric} setMetric={setMetric} summary={summarizeTrend(trends.sleep)} colors={colors} /> : null}
-      {category === "condition" ? <ConditionPanel trends={trends} colors={colors} /> : null}
-      {category === "headache" ? <HeadachePanel events={events} dailyHeadacheDays={personalRecords.filter((record) => record.headache).length} personalRecords={personalRecords} trends={trends} colors={colors} /> : null}
-      {category === "environment" ? <EnvironmentPanel latestPressureBatch={latestPressureBatch} latestPressureChanges={latestPressureChanges} caffeineRecords={personalRecords.filter((record) => record.caffeine && record.caffeineTime)} colors={colors} /> : null}
+      {categoryHasData ? <>
+        {category === "sleep" ? <SleepPanel trends={trends} records={personalRecords} granularity={granularity} metric={metric} setMetric={setMetric} summary={summarizeTrend(trends.sleep)} colors={colors} /> : null}
+        {category === "condition" ? <ConditionPanel trends={trends} colors={colors} /> : null}
+        {category === "headache" ? <HeadachePanel events={events} dailyHeadacheDays={personalRecords.filter((record) => record.headache).length} personalRecords={personalRecords} trends={trends} colors={colors} /> : null}
+        {category === "environment" ? <EnvironmentPanel latestPressureBatch={latestPressureBatch} latestPressureChanges={latestPressureChanges} caffeineRecords={caffeineRecords} colors={colors} /> : null}
+      </> : <CategoryEmptyState category={category} colors={colors} />}
       <DataQualityCard quality={quality} />
       <CollapsibleRelations relations={relations} />
       {category === "sleep" ? <SleepRecommendation recommendation={recommendation} settings={settings} updateSettings={updateSettings} bedTime={bedTime} wakeTime={wakeTime} sleepMinutes={sleepMinutes} setBedTime={setBedTime} setWakeTime={setWakeTime} setSleepMinutes={setSleepMinutes} toggleRecommendation={toggleRecommendation} saveOverrides={saveOverrides} isSavingRecommendation={isSavingRecommendation} /> : null}
@@ -138,6 +147,11 @@ export default function AnalysisDetailScreen() {
 
 function CollapsibleRelations({ relations }: { relations: ReturnType<typeof analyzeRelation>[] }) {
   return <Collapsible title="関連分析を見る"><View style={styles.relations}>{relations.map((relation) => <RelationCard key={relation.key} relation={relation} />)}</View><Text style={styles.relationNote}>Pearsonの相関係数を使用し、5組未満・値のばらつきがない場合は算出しません。相関は関連の目安であり、原因を示すものではありません。</Text></Collapsible>;
+}
+
+function CategoryEmptyState({ category, colors }: { category: AnalysisCategory; colors: ReturnType<typeof useColors> }) {
+  const labels: Record<AnalysisCategory, string> = { sleep: "睡眠", condition: "体調", headache: "頭痛", environment: "環境" };
+  return <View style={[styles.emptyState, { backgroundColor: colors.surface, borderColor: colors.border }]}><Text style={[styles.emptyStateTitle, { color: colors.foreground }]}>この期間の{labels[category]}記録はありません</Text><Text style={[styles.emptyStateNote, { color: colors.muted }]}>記録を追加すると、ここに詳細が表示されます。</Text></View>;
 }
 
 function SleepRecommendation({ recommendation, settings, updateSettings, bedTime, wakeTime, sleepMinutes, setBedTime, setWakeTime, setSleepMinutes, toggleRecommendation, saveOverrides, isSavingRecommendation }: { recommendation: ReturnType<typeof buildSleepRecommendation>; settings: ReturnType<typeof useSleepData>["settings"]; updateSettings: ReturnType<typeof useSleepData>["updateSettings"]; bedTime: string; wakeTime: string; sleepMinutes: string; setBedTime: (value: string) => void; setWakeTime: (value: string) => void; setSleepMinutes: (value: string) => void; toggleRecommendation: () => void; saveOverrides: () => void; isSavingRecommendation: boolean }) {
@@ -165,4 +179,7 @@ const styles = StyleSheet.create({
   note: { fontSize: 12, lineHeight: 18 },
   disclaimer: { borderRadius: 14, padding: 13 },
   disclaimerText: { fontSize: 12, lineHeight: 18 },
+  emptyState: { borderRadius: 14, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 14, gap: 4 },
+  emptyStateTitle: { fontSize: 15, lineHeight: 21, fontWeight: "800" },
+  emptyStateNote: { fontSize: 12, lineHeight: 18 },
 });
