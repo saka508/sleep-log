@@ -1,6 +1,6 @@
 const BASE = "/sleep-log";
-const SHELL_CACHE = "sleep-log-shell-v10";
-const RUNTIME_CACHE = "sleep-log-runtime-v10";
+const SHELL_CACHE = "sleep-log-shell-v11";
+const RUNTIME_CACHE = "sleep-log-runtime-v11";
 const KEEP = [SHELL_CACHE, RUNTIME_CACHE];
 
 // Every route Expo Router exports, so a deep link opens offline too. Both the

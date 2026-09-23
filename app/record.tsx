@@ -8,7 +8,7 @@ import { ScreenContainer } from "@/components/screen-container";
 import { LocalDatePicker, LocalTimePicker } from "@/components/local-date-time-picker";
 import { useColors } from "@/hooks/use-colors";
 import { useSleepData } from "@/lib/sleep-store";
-import { formatAcquiredAt, formatDate, formatDuration, HEADACHE_FEATURE_OPTIONS, isDateKey, isTime, sleepMinutesFromTimes, todayKey, type HeadacheFeature, type SleepRecord, type WeatherSnapshot } from "@/lib/sleep-utils";
+import { actualSleepMinutesFromTimes, formatAcquiredAt, formatDate, formatDuration, HEADACHE_FEATURE_OPTIONS, isDateKey, isTime, timeInBedMinutesFromTimes, todayKey, type HeadacheFeature, type SleepRecord, type WeatherSnapshot } from "@/lib/sleep-utils";
 import { fetchWeatherForCurrentLocation, OPEN_METEO_ATTRIBUTION_URL, WeatherError } from "@/lib/weather-service";
 
 type BoolChoice = "yes" | "no";
@@ -23,8 +23,10 @@ export default function RecordScreen() {
   const [date, setDate] = useState(targetDate);
   const [bedTime, setBedTime] = useState("23:30");
   const [wakeTime, setWakeTime] = useState("07:00");
-  const [sleepMinutes, setSleepMinutes] = useState("450");
-  const [latencyMinutes, setLatencyMinutes] = useState("20");
+  const [sleepMinutes, setSleepMinutes] = useState("");
+  const [latencyMinutes, setLatencyMinutes] = useState("");
+  const [isSleepMinutesManuallyEdited, setIsSleepMinutesManuallyEdited] = useState(false);
+  const [hasConfirmedActualSleepDuration, setHasConfirmedActualSleepDuration] = useState(false);
   const [napMinutes, setNapMinutes] = useState("0");
   const [nap, setNap] = useState<BoolChoice>("no");
   const [sleepiness, setSleepiness] = useState(4);
@@ -54,8 +56,10 @@ export default function RecordScreen() {
       setDate(targetDate);
       setBedTime("23:30");
       setWakeTime("07:00");
-      setSleepMinutes("450");
-      setLatencyMinutes("20");
+      setSleepMinutes("");
+      setLatencyMinutes("");
+      setIsSleepMinutesManuallyEdited(false);
+      setHasConfirmedActualSleepDuration(false);
       setNapMinutes("0");
       setNap("no");
       setSleepiness(4);
@@ -77,7 +81,11 @@ export default function RecordScreen() {
     setBedTime(source.bedTime);
     setWakeTime(source.wakeTime);
     setSleepMinutes(String(source.sleepMinutes));
-    setLatencyMinutes(String(source.latencyMinutes));
+    setLatencyMinutes(source.latencyMinutes === undefined ? "" : String(source.latencyMinutes));
+    // Existing values may have been manually corrected under the former
+    // definition. Never derive and overwrite them simply by opening a record.
+    setIsSleepMinutesManuallyEdited(true);
+    setHasConfirmedActualSleepDuration(source.sleepDurationDefinition === "actualSleep");
     setNapMinutes(String(source.napMinutes));
     setNap(source.napMinutes > 0 ? "yes" : "no");
     setSleepiness(source.sleepiness);
@@ -95,19 +103,40 @@ export default function RecordScreen() {
     setNote(source.note);
   }, [existing, targetDate]);
 
-  const calculatedMinutes = sleepMinutesFromTimes(bedTime, wakeTime);
+  const timeInBedMinutes = timeInBedMinutesFromTimes(bedTime, wakeTime);
+  const parsedLatencyMinutes = latencyMinutes.trim() === "" ? undefined : Number(latencyMinutes);
+  const calculatedActualSleepMinutes = actualSleepMinutesFromTimes(bedTime, wakeTime, parsedLatencyMinutes);
+  const isLegacyExistingRecord = existing?.sleepDurationDefinition !== "actualSleep" && !hasConfirmedActualSleepDuration;
   const recalculate = () => {
-    if (calculatedMinutes !== null) setSleepMinutes(String(calculatedMinutes));
+    if (calculatedActualSleepMinutes === null) {
+      Alert.alert("寝つくまでの時間を入力してください", "実際に眠っていた時間を時刻から計算するには、寝つくまでの時間が必要です。");
+      return;
+    }
+    setSleepMinutes(String(calculatedActualSleepMinutes));
+    setIsSleepMinutesManuallyEdited(false);
+    setHasConfirmedActualSleepDuration(true);
   };
   const updateBed = (value: string) => {
     setBedTime(value);
-    const next = sleepMinutesFromTimes(value, wakeTime);
-    if (next !== null) setSleepMinutes(String(next));
+    if (!isSleepMinutesManuallyEdited) {
+      const next = actualSleepMinutesFromTimes(value, wakeTime, parsedLatencyMinutes);
+      setSleepMinutes(next === null ? "" : String(next));
+    }
   };
   const updateWake = (value: string) => {
     setWakeTime(value);
-    const next = sleepMinutesFromTimes(bedTime, value);
-    if (next !== null) setSleepMinutes(String(next));
+    if (!isSleepMinutesManuallyEdited) {
+      const next = actualSleepMinutesFromTimes(bedTime, value, parsedLatencyMinutes);
+      setSleepMinutes(next === null ? "" : String(next));
+    }
+  };
+  const updateLatency = (value: string) => {
+    setLatencyMinutes(value);
+    if (!isSleepMinutesManuallyEdited) {
+      const nextLatency = value.trim() === "" ? undefined : Number(value);
+      const next = actualSleepMinutesFromTimes(bedTime, wakeTime, nextLatency);
+      setSleepMinutes(next === null ? "" : String(next));
+    }
   };
 
   const acquireWeather = async () => {
@@ -137,7 +166,7 @@ export default function RecordScreen() {
     if (saveLock.current) return;
     setSaveFeedback(null);
     const minutes = Number(sleepMinutes);
-    const latency = Number(latencyMinutes);
+    const latency = latencyMinutes.trim() === "" ? undefined : Number(latencyMinutes);
     const napDuration = nap === "yes" ? Number(napMinutes) : 0;
     if (!isDateKey(date)) {
       Alert.alert("日付を確認してください", "YYYY-MM-DD の形式で入力してください。");
@@ -147,8 +176,12 @@ export default function RecordScreen() {
       Alert.alert("時刻を確認してください", "就寝・起床時刻は HH:MM の24時間表記で入力してください。");
       return;
     }
-    if (!Number.isFinite(minutes) || minutes <= 0 || !Number.isFinite(latency) || latency < 0 || !Number.isFinite(napDuration) || (nap === "yes" && napDuration <= 0)) {
-      Alert.alert("数値を確認してください", "睡眠時間は1分以上、寝つきは0分以上、昼寝ありの場合は1分以上で入力してください。");
+    if (!Number.isFinite(minutes) || minutes <= 0 || (latency !== undefined && (!Number.isFinite(latency) || latency < 0)) || !Number.isFinite(napDuration) || (nap === "yes" && napDuration <= 0)) {
+      Alert.alert("数値を確認してください", "実際に眠っていた時間は1分以上、寝つきは入力する場合0分以上、昼寝ありの場合は1分以上で入力してください。");
+      return;
+    }
+    if (timeInBedMinutes !== null && latency !== undefined && latency > timeInBedMinutes) {
+      Alert.alert("寝つくまでの時間を確認してください", "寝つくまでの時間は、就寝から起床までの時間を超えない値にしてください。");
       return;
     }
     if (caffeine === "yes" && caffeineTime.trim() && !isTime(caffeineTime)) {
@@ -163,7 +196,8 @@ export default function RecordScreen() {
       bedTime,
       wakeTime,
       sleepMinutes: Math.round(minutes),
-      latencyMinutes: Math.round(latency),
+      sleepDurationDefinition: hasConfirmedActualSleepDuration || !existing ? "actualSleep" : "legacy",
+      ...(latency !== undefined ? { latencyMinutes: Math.round(latency) } : {}),
       napMinutes: Math.round(napDuration),
       sleepiness,
       ...(fatigue !== undefined ? { fatigue } : {}),
@@ -227,8 +261,8 @@ export default function RecordScreen() {
               <MaterialIcons name="auto-awesome" size={20} color={colors.primary} />
             </View>
             <View style={styles.autoCopy}>
-              <Text style={[styles.autoTitle, { color: colors.foreground }]}>睡眠時間を自動計算</Text>
-              <Text style={[styles.autoText, { color: colors.muted }]}>就寝・起床時刻を入力すると計算されます。実際に眠った時間は下で修正できます。</Text>
+              <Text style={[styles.autoTitle, { color: colors.foreground }]}>睡眠時間を計算</Text>
+              <Text style={[styles.autoText, { color: colors.muted }]}>布団にいた時間は就寝〜起床の時刻差です。寝つくまでを入力すると、実際に眠っていた時間を自動計算します。必要に応じて手動で修正できます。</Text>
             </View>
           </Card>
 
@@ -242,18 +276,19 @@ export default function RecordScreen() {
               <LocalTimePicker label="就寝時刻" value={bedTime} onChange={updateBed} accessibilityLabel="就寝時刻を選択" />
               <LocalTimePicker label="起床時刻" value={wakeTime} onChange={updateWake} accessibilityLabel="起床時刻を選択" />
             </View>
+            <Text style={[styles.durationSummary, { color: colors.muted }]}>布団にいた時間：{timeInBedMinutes === null ? "時刻を確認してください" : formatDuration(timeInBedMinutes, true)}</Text>
             <View style={styles.formGroup}>
-              <FieldLabel label="実睡眠時間" hint={calculatedMinutes !== null ? `時刻から ${Math.floor(calculatedMinutes / 60)}時間${calculatedMinutes % 60}分` : "手動で入力"} />
+              <FieldLabel label={isLegacyExistingRecord ? "睡眠時間（旧記録）" : "実際に眠っていた時間"} hint={isLegacyExistingRecord ? "旧記録は自動変換しません。実睡眠として確認する場合は、手動修正または再計算してください。" : calculatedActualSleepMinutes !== null ? `時刻差から寝つき ${formatDuration(parsedLatencyMinutes, true)} を差し引くと ${formatDuration(calculatedActualSleepMinutes, true)}` : "寝つき未記録のため、手動入力または寝つきの入力が必要です"} />
               <View style={styles.withUnit}>
-                <AppTextInput style={styles.numberInput} value={sleepMinutes} onChangeText={setSleepMinutes} keyboardType="number-pad" />
+                <AppTextInput style={styles.numberInput} value={sleepMinutes} onChangeText={(value) => { setSleepMinutes(value); setIsSleepMinutesManuallyEdited(true); setHasConfirmedActualSleepDuration(true); }} keyboardType="number-pad" />
                 <Text style={[styles.unit, { color: colors.muted }]}>分</Text>
                 <PrimaryButton label="再計算" secondary onPress={recalculate} />
               </View>
             </View>
             <View style={styles.formGroup}>
-              <FieldLabel label="寝つくまで" />
+              <FieldLabel label="寝つくまで" hint="未記録のままでも保存できます" />
               <View style={styles.withUnit}>
-                <AppTextInput style={styles.numberInput} value={latencyMinutes} onChangeText={setLatencyMinutes} keyboardType="number-pad" />
+                <AppTextInput style={styles.numberInput} value={latencyMinutes} onChangeText={updateLatency} keyboardType="number-pad" />
                 <Text style={[styles.unit, { color: colors.muted }]}>分</Text>
               </View>
             </View>
@@ -400,6 +435,7 @@ const styles = StyleSheet.create({
   formCard: { gap: 14 },
   headacheEventLink: { gap: 11 },
   formGroup: { gap: 0 },
+  durationSummary: { fontSize: 13, lineHeight: 19, fontWeight: "700", marginTop: -5 },
   conditionalFields: { gap: 12, padding: 12, borderWidth: 1, borderRadius: 14 },
   twoColumns: { flexDirection: "row", gap: 12 },
   withUnit: { flexDirection: "row", alignItems: "center", gap: 7 },

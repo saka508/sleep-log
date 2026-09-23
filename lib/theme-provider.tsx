@@ -88,7 +88,13 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     [colorScheme, preference, setPreference],
   );
 
-  return <ThemeContext.Provider value={value}><View style={[{ flex: 1 }, themeVariables]}>{children}</View></ThemeContext.Provider>;
+  return (
+    <ThemeContext.Provider value={value}>
+      <View style={[{ flex: 1, backgroundColor: SchemeColors[colorScheme].background }, themeVariables]}>
+        {children}
+      </View>
+    </ThemeContext.Provider>
+  );
 }
 
 export function useThemeContext(): ThemeContextValue {

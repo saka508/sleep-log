@@ -33,7 +33,9 @@ Sleep Logは、日本語の個人向け睡眠・生活記録アプリである�
 
 ### 睡眠
 
-現在の`SleepRecord`は、`id`、`date`、`bedTime`、`wakeTime`、`sleepMinutes`、`latencyMinutes`、`napMinutes`を持つ。`id`は保存時に`date`へ揃えられ、日次記録は1ローカル日付につき1件である。
+現在の`SleepRecord`は、`id`、`date`、`bedTime`、`wakeTime`、`sleepMinutes`、optionalな`latencyMinutes`、`napMinutes`を持つ。就寝〜起床の時刻差は保存せず、`布団にいた時間`として都度導出する。`sleepDurationDefinition: "actualSleep"`を持つ新規・再保存記録では、`sleepMinutes`は入眠までの時間を差し引いた`実際に眠っていた時間`である。`latencyMinutes`が未記録なら実睡眠の自動計算は行わず、未入力と0分を区別する。`sleepMinutes`を手動で修正した場合も、実睡眠の記録値として保存する。
+
+`sleepDurationDefinition`がない旧記録と旧CSVの記録は`legacy`として読み込む。既存の`sleepMinutes`は意味を推定できないため、入眠までの時間を後から差し引かず、値を変更しない。旧記録は画面で「睡眠時間（旧記録）」として区別する。`id`は保存時に`date`へ揃えられ、日次記録は1ローカル日付につき1件である。
 
 ### 主観状態
 
@@ -90,13 +92,13 @@ Sleep Logは、日本語の個人向け睡眠・生活記録アプリである�
 - 気圧履歴はAsyncStorageキー`sleep-log.pressure-history.v1`へ、`{ schemaVersion: 1, batches }`として独立保存する。各バッチの保持期間は取得日時から30日、最大100バッチである。
 - テーマ設定はAsyncStorageキー`sleep-log.theme`へ保存する。
 - `DailyConditionRecord`は保存モデルではなく、`SleepRecord`から都度作る読み取りモデルである。`schemaVersion: 1`は読み取り形の版であり、旧保存形式を移行済みという意味ではない。
-- 既存保存データへの自動migrationは実装されていない。optionalフィールドと読み取り時正規化で旧記録を扱う。
+- `sleepDurationDefinition`を持たない既存保存データと旧CSVは、読み取り時に非破壊で`legacy`として扱う。既存の`sleepMinutes`や入眠時間を引き直さない。新規・再保存記録だけが`actualSleep`になる。
 - 日次記録は日付でmergeし、同じ日付の保存・importは既存日次記録を置換する。頭痛イベントはIDでmergeする。
 - 読み込み時、日次記録は1件ずつ正規化し、必要フィールドを欠くものを除外する。頭痛イベントも1件ずつ正規化し、壊れた1件を除外して正常イベントを残す。
 - JSON全体が解析不能な場合、日次storeはサンプル記録へ、頭痛event storeは空配列へfallbackする。
 - 日次記録は既存列順のCSV、頭痛イベントはネスト情報を保持するversion付きJSONで別々にバックアップする。気圧履歴は既存CSVを変更せず、`sleep-log.pressure-history`形式の専用JSONでexport/importする。
 
-日次CSVの列順は次で固定する。
+日次CSVの既存24列の順序は固定する。互換性を保った末尾追加として、25列目に`睡眠時間の定義`を置く。旧CSVに25列目がない場合は`legacy`として読み込む。
 
 1. 日付
 2. 就寝時刻
@@ -122,12 +124,13 @@ Sleep Logは、日本語の個人向け睡眠・生活記録アプリである�
 22. 天候データ提供元
 23. 疲労（0-10）
 24. 筋肉疲労（0-10）
+25. 睡眠時間の定義（`legacy`または`actualSleep`）
 
 ## 6. 日付・時刻・単位・欠損値のルール
 
 - 日次キーは`YYYY-MM-DD`の端末ローカル日付で作り、`toISOString().slice(0, 10)`で生成しない。
 - `dateKey`、`todayKey`、`dateFromKey`、`daysFromToday`を日次処理に使う。
-- 就寝・起床は24時間の`HH:MM`文字列で保存する。起床が就寝以下なら翌日とみなし、最大24時間内の差を睡眠時間とする。
+- 就寝・起床は24時間の`HH:MM`文字列で保存する。起床が就寝以下なら翌日とみなし、最大24時間内の差を`布団にいた時間`とする。`latencyMinutes`が記録されている新規・再保存記録では、`実際に眠っていた時間 = 布団にいた時間 − 寝つくまで`を初期値・再計算値として使う。寝つきが未記録なら、実睡眠時間を架空に自動計算せず、手入力または寝つきの入力を待つ。保存済みの旧記録は再計算しない。
 - Webの日付ピッカーは年・月・日、時刻ピッカーは時・分を選択する。通常の分候補は5分単位だが、既存値の分精度を選択肢へ残す。
 - 頭痛イベントは画面で選んだローカル日付・時刻からISO timestampを作り、別途ローカル`date`も保持する。
 - `createdAt`、`updatedAt`、天候の観測/取得日時はISO timestampである。表示時は端末ローカル時刻へ変換する。

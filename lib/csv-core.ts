@@ -12,7 +12,7 @@ const HEADERS = [
   "昼寝時間（分）", "眠気（0-10）", "頭の冴え（0-10）", "カフェイン", "頭痛", "メモ",
   "昼寝", "頭痛の強さ（0-10）", "頭痛の特徴", "カフェイン摂取時刻", "カフェインメモ",
   "気圧（hPa）", "気温（℃）", "天気", "天気コード（WMO）", "天候取得日時", "天候データ提供元",
-  "疲労（0-10）", "筋肉疲労（0-10）",
+  "疲労（0-10）", "筋肉疲労（0-10）", "睡眠時間の定義",
 ];
 
 function escapeCsv(value: string | number | boolean) {
@@ -26,7 +26,7 @@ export function recordsToCsv(records: SleepRecord[]) {
     record.bedTime,
     record.wakeTime,
     record.sleepMinutes,
-    record.latencyMinutes,
+    record.latencyMinutes ?? "",
     record.napMinutes,
     record.sleepiness,
     record.clarity,
@@ -46,6 +46,7 @@ export function recordsToCsv(records: SleepRecord[]) {
     record.weather?.source ?? "",
     record.fatigue ?? "",
     record.muscleFatigue ?? "",
+    record.sleepDurationDefinition ?? "legacy",
   ].map(escapeCsv).join(","));
   return `\uFEFF${HEADERS.join(",")}\n${lines.join("\n")}`;
 }
@@ -91,7 +92,7 @@ export function recordsFromCsv(text: string): SleepRecord[] {
   if (rows.length < 2) return [];
   const headerIndex = new Map(rows[0].map((header, index) => [header.trim(), index]));
   const find = (...names: string[]) => names.map((name) => headerIndex.get(name)).find((index): index is number => index !== undefined) ?? -1;
-  const columns = { date: find("日付", "date"), bedTime: find("就寝時刻", "bed_time"), wakeTime: find("起床時刻", "wake_time"), sleepMinutes: find("実睡眠時間（分）", "sleep_minutes"), latencyMinutes: find("寝つくまで（分）", "latency_minutes"), napMinutes: find("昼寝時間（分）", "nap_minutes"), sleepiness: find("眠気（0-10）", "sleepiness"), fatigue: find("疲労（0-10）", "fatigue"), clarity: find("頭の冴え（0-10）", "clarity"), caffeine: find("カフェイン", "caffeine"), headache: find("頭痛", "headache"), note: find("メモ", "note"), headacheIntensity: find("頭痛の強さ（0-10）", "headache_intensity"), headacheFeatures: find("頭痛の特徴", "headache_features"), caffeineTime: find("カフェイン摂取時刻", "caffeine_time"), caffeineNote: find("カフェインメモ", "caffeine_note"), pressureHpa: find("気圧（hPa）", "pressure_hpa"), temperatureC: find("気温（℃）", "temperature_c"), weatherCondition: find("天気", "weather"), weatherCode: find("天気コード（WMO）", "weather_code"), weatherFetchedAt: find("天候取得日時", "weather_fetched_at"), weatherSource: find("天候データ提供元", "weather_source"), muscleFatigue: find("筋肉疲労（0-10）", "muscle_fatigue") };
+  const columns = { date: find("日付", "date"), bedTime: find("就寝時刻", "bed_time"), wakeTime: find("起床時刻", "wake_time"), sleepMinutes: find("実睡眠時間（分）", "sleep_minutes"), latencyMinutes: find("寝つくまで（分）", "latency_minutes"), napMinutes: find("昼寝時間（分）", "nap_minutes"), sleepiness: find("眠気（0-10）", "sleepiness"), fatigue: find("疲労（0-10）", "fatigue"), clarity: find("頭の冴え（0-10）", "clarity"), caffeine: find("カフェイン", "caffeine"), headache: find("頭痛", "headache"), note: find("メモ", "note"), headacheIntensity: find("頭痛の強さ（0-10）", "headache_intensity"), headacheFeatures: find("頭痛の特徴", "headache_features"), caffeineTime: find("カフェイン摂取時刻", "caffeine_time"), caffeineNote: find("カフェインメモ", "caffeine_note"), pressureHpa: find("気圧（hPa）", "pressure_hpa"), temperatureC: find("気温（℃）", "temperature_c"), weatherCondition: find("天気", "weather"), weatherCode: find("天気コード（WMO）", "weather_code"), weatherFetchedAt: find("天候取得日時", "weather_fetched_at"), weatherSource: find("天候データ提供元", "weather_source"), muscleFatigue: find("筋肉疲労（0-10）", "muscle_fatigue"), sleepDurationDefinition: find("睡眠時間の定義", "sleep_duration_definition") };
   if (columns.date < 0 || columns.bedTime < 0 || columns.wakeTime < 0) return [];
   const now = new Date().toISOString();
   return rows.slice(1).flatMap((row) => {
@@ -112,7 +113,9 @@ export function recordsFromCsv(text: string): SleepRecord[] {
     const weather = pressureHpa !== undefined && temperatureC !== undefined && weatherCode !== undefined && condition && fetchedAt && Number.isFinite(Date.parse(fetchedAt)) && source === "Open-Meteo"
       ? { pressureHpa, temperatureC, condition, weatherCode: Math.round(weatherCode), fetchedAt, source: "Open-Meteo" as const }
       : undefined;
-    return [{ id: date, date, bedTime, wakeTime, sleepMinutes: Math.max(0, toNumber(row[columns.sleepMinutes] ?? "0")), latencyMinutes: Math.max(0, toNumber(row[columns.latencyMinutes] ?? "0")), napMinutes: Math.max(0, toNumber(row[columns.napMinutes] ?? "0")), sleepiness: toScore(row[columns.sleepiness] ?? "0"), ...(fatigue !== undefined ? { fatigue } : {}), clarity: toScore(row[columns.clarity] ?? "0"), caffeine, caffeineTime: caffeine && isTime(row[columns.caffeineTime] ?? "") ? row[columns.caffeineTime].trim() : "", caffeineNote: caffeine ? (row[columns.caffeineNote] ?? "").trim() : "", headache, headacheIntensity: headache ? toScore(row[columns.headacheIntensity] ?? "0") : 0, headacheFeatures: headache ? toHeadacheFeatures(row[columns.headacheFeatures] ?? "") : [], ...(weather ? { weather } : {}), ...(muscleFatigue !== undefined ? { muscleFatigue } : {}), note: row[columns.note] ?? "", isSample: false, createdAt: now, updatedAt: now }];
+    const latencyMinutes = toOptionalNumber(row[columns.latencyMinutes]);
+    const sleepDurationDefinition = row[columns.sleepDurationDefinition]?.trim() === "actualSleep" ? "actualSleep" as const : "legacy" as const;
+    return [{ id: date, date, bedTime, wakeTime, sleepMinutes: Math.max(0, toNumber(row[columns.sleepMinutes] ?? "0")), sleepDurationDefinition, ...(latencyMinutes !== undefined ? { latencyMinutes: Math.max(0, latencyMinutes) } : {}), napMinutes: Math.max(0, toNumber(row[columns.napMinutes] ?? "0")), sleepiness: toScore(row[columns.sleepiness] ?? "0"), ...(fatigue !== undefined ? { fatigue } : {}), clarity: toScore(row[columns.clarity] ?? "0"), caffeine, caffeineTime: caffeine && isTime(row[columns.caffeineTime] ?? "") ? row[columns.caffeineTime].trim() : "", caffeineNote: caffeine ? (row[columns.caffeineNote] ?? "").trim() : "", headache, headacheIntensity: headache ? toScore(row[columns.headacheIntensity] ?? "0") : 0, headacheFeatures: headache ? toHeadacheFeatures(row[columns.headacheFeatures] ?? "") : [], ...(weather ? { weather } : {}), ...(muscleFatigue !== undefined ? { muscleFatigue } : {}), note: row[columns.note] ?? "", isSample: false, createdAt: now, updatedAt: now }];
   });
 }
 

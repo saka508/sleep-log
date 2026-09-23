@@ -40,7 +40,7 @@ export default function HistoryScreen() {
                 <Text style={[styles.rowDate, { color: colors.foreground }]}>{formatMonthDay(item.date)}</Text>
                 {item.isSample ? <SmallStatus label="サンプル" tone="muted" /> : null}
               </View>
-              <Text style={[styles.rowMeta, { color: colors.muted }]}>{item.bedTime} → {item.wakeTime}　寝つき {item.latencyMinutes}分</Text>
+              <Text style={[styles.rowMeta, { color: colors.muted }]}>{item.bedTime} → {item.wakeTime}　寝つき {item.latencyMinutes === undefined ? "未記録" : `${item.latencyMinutes}分`}</Text>
               <View style={styles.tags}>
                 {item.napMinutes > 0 ? <Text style={[styles.tag, { color: colors.primary, backgroundColor: `${colors.primary}12` }]}>昼寝 {item.napMinutes}分</Text> : null}
                 {item.caffeine ? <Text style={[styles.tag, { color: colors.warning, backgroundColor: `${colors.warning}14` }]}>カフェイン</Text> : null}
