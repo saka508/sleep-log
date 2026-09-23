@@ -16,6 +16,13 @@ export default function RootHtml({ children }: PropsWithChildren) {
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
         <link rel="manifest" href="/sleep-log/manifest.json" />
         <link rel="apple-touch-icon" href="/sleep-log/icon.png" />
+        <style>{`
+          html, body, #root {
+            min-height: 100%;
+            min-height: 100dvh;
+            background-color: var(--color-background, #F7F8FC);
+          }
+        `}</style>
         <ScrollViewStyleReset />
       </head>
       <body {...bodyAttributes}>

@@ -24,7 +24,14 @@ export type SleepRecord = {
   bedTime: string;
   wakeTime: string;
   sleepMinutes: number;
-  latencyMinutes: number;
+  /**
+   * Actual sleep duration as recorded by the user.  Records created before
+   * the distinction below are retained as legacy values and are never
+   * re-calculated on load.
+   */
+  sleepDurationDefinition?: "legacy" | "actualSleep";
+  /** Time from getting into bed until falling asleep; omitted when unknown. */
+  latencyMinutes?: number;
   napMinutes: number;
   sleepiness: number;
   fatigue?: number;
@@ -95,7 +102,10 @@ export function normalizeSleepRecord(value: Partial<SleepRecord>): SleepRecord |
     bedTime: value.bedTime,
     wakeTime: value.wakeTime,
     sleepMinutes: Math.max(0, Number(value.sleepMinutes) || 0),
-    latencyMinutes: Math.max(0, Number(value.latencyMinutes) || 0),
+    sleepDurationDefinition: value.sleepDurationDefinition === "actualSleep" ? "actualSleep" : "legacy",
+    ...(value.latencyMinutes === null || value.latencyMinutes === undefined
+      ? {}
+      : { latencyMinutes: Math.max(0, Number(value.latencyMinutes) || 0) }),
     napMinutes: Math.max(0, Number(value.napMinutes) || 0),
     sleepiness: safeScore(value.sleepiness),
     ...(fatigue !== undefined ? { fatigue } : {}),
@@ -185,12 +195,26 @@ export function isTime(value: string) {
   return timeToMinutes(value) !== null;
 }
 
-export function sleepMinutesFromTimes(bedTime: string, wakeTime: string) {
+/** The time spent in bed, derived from the recorded bed and wake times. */
+export function timeInBedMinutesFromTimes(bedTime: string, wakeTime: string) {
   const bed = timeToMinutes(bedTime);
   const wake = timeToMinutes(wakeTime);
   if (bed === null || wake === null) return null;
   const difference = wake - bed;
   return difference <= 0 ? difference + 24 * 60 : difference;
+}
+
+/** @deprecated Use timeInBedMinutesFromTimes for the bed-to-wake duration. */
+export const sleepMinutesFromTimes = timeInBedMinutesFromTimes;
+
+/**
+ * Calculates actual sleep only when the time to fall asleep is known.
+ * Undefined latency is deliberately not treated as zero.
+ */
+export function actualSleepMinutesFromTimes(bedTime: string, wakeTime: string, latencyMinutes?: number | null) {
+  const timeInBedMinutes = timeInBedMinutesFromTimes(bedTime, wakeTime);
+  if (timeInBedMinutes === null || latencyMinutes === null || latencyMinutes === undefined || !Number.isFinite(latencyMinutes)) return null;
+  return Math.max(0, timeInBedMinutes - Math.max(0, Math.round(latencyMinutes)));
 }
 
 export function formatDuration(minutes?: number | null, compact = false) {

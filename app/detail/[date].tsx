@@ -8,7 +8,7 @@ import { Card, EmptyState, IconButton, PageHeader, PrimaryButton, SectionLabel, 
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { useSleepData } from "@/lib/sleep-store";
-import { formatAcquiredAt, formatDate, formatDuration, getHeadacheFeatureLabel } from "@/lib/sleep-utils";
+import { formatAcquiredAt, formatDate, formatDuration, getHeadacheFeatureLabel, timeInBedMinutesFromTimes } from "@/lib/sleep-utils";
 import { OPEN_METEO_ATTRIBUTION_URL } from "@/lib/weather-service";
 
 export default function RecordDetailScreen() {
@@ -16,6 +16,7 @@ export default function RecordDetailScreen() {
   const { date } = useLocalSearchParams<{ date: string }>();
   const { records, removeRecord, isReady } = useSleepData();
   const record = records.find((item) => item.date === date);
+  const timeInBedMinutes = record ? timeInBedMinutesFromTimes(record.bedTime, record.wakeTime) : null;
   const [deleteDialog, setDeleteDialog] = useState<"confirm" | "success" | "error" | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -54,7 +55,7 @@ export default function RecordDetailScreen() {
         <Card style={[styles.hero, { backgroundColor: colors.primary, borderColor: colors.primary }]}>
           <View style={styles.heroTop}>
             <View>
-              <Text style={styles.heroLabel}>実睡眠時間</Text>
+              <Text style={styles.heroLabel}>{record.sleepDurationDefinition === "actualSleep" ? "実際に眠っていた時間" : "睡眠時間（旧記録）"}</Text>
               <Text style={styles.heroValue}>{formatDuration(record.sleepMinutes, true)}</Text>
             </View>
             {record.isSample ? <SmallStatus label="サンプル" tone="muted" /> : <MaterialIcons name="bedtime" size={28} color="#FFFFFF" />}
@@ -64,7 +65,8 @@ export default function RecordDetailScreen() {
 
         <SectionLabel title="睡眠の内訳" />
         <Card style={styles.listCard}>
-          <DetailRow icon="timer" label="寝つくまで" value={`${record.latencyMinutes} 分`} />
+          <DetailRow icon="bed" label="布団にいた時間" value={timeInBedMinutes === null ? "時刻を確認してください" : formatDuration(timeInBedMinutes, true)} />
+          <DetailRow icon="timer" label="寝つくまで" value={record.latencyMinutes === undefined ? "未記録" : `${record.latencyMinutes} 分`} />
           <DetailRow icon="hotel" label="昼寝" value={record.napMinutes > 0 ? `${record.napMinutes} 分` : "なし"} last />
         </Card>
 

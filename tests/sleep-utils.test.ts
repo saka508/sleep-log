@@ -127,7 +127,7 @@ describe("CSV import and export", () => {
     });
     expect(csv).toContain("片側／吐き気／光や音がつらい");
     expect(csv.split("\n")[0]).toContain("天候データ提供元");
-    expect(csv.split("\n")[0]).toMatch(/疲労（0-10）,筋肉疲労（0-10）$/);
+    expect(csv.split("\n")[0]).toMatch(/疲労（0-10）,筋肉疲労（0-10）,睡眠時間の定義$/);
   });
 
   it("imports a Phase 1 CSV with all original columns and safe defaults", () => {
