@@ -279,9 +279,11 @@ export default function RecordScreen() {
             <Text style={[styles.durationSummary, { color: colors.muted }]}>布団にいた時間：{timeInBedMinutes === null ? "時刻を確認してください" : formatDuration(timeInBedMinutes, true)}</Text>
             <View style={styles.formGroup}>
               <FieldLabel label={isLegacyExistingRecord ? "睡眠時間（旧記録）" : "実際に眠っていた時間"} hint={isLegacyExistingRecord ? "旧記録は自動変換しません。実睡眠として確認する場合は、手動修正または再計算してください。" : calculatedActualSleepMinutes !== null ? `時刻差から寝つき ${formatDuration(parsedLatencyMinutes, true)} を差し引くと ${formatDuration(calculatedActualSleepMinutes, true)}` : "寝つき未記録のため、手動入力または寝つきの入力が必要です"} />
-              <View style={styles.withUnit}>
-                <AppTextInput style={styles.numberInput} value={sleepMinutes} onChangeText={(value) => { setSleepMinutes(value); setIsSleepMinutesManuallyEdited(true); setHasConfirmedActualSleepDuration(true); }} keyboardType="number-pad" />
-                <Text style={[styles.unit, { color: colors.muted }]}>分</Text>
+              <View style={styles.actualSleepControl}>
+                <View style={styles.withUnit}>
+                  <AppTextInput style={styles.numberInput} value={sleepMinutes} onChangeText={(value) => { setSleepMinutes(value); setIsSleepMinutesManuallyEdited(true); setHasConfirmedActualSleepDuration(true); }} keyboardType="number-pad" />
+                  <Text style={[styles.unit, { color: colors.muted }]}>分</Text>
+                </View>
                 <PrimaryButton label="再計算" secondary onPress={recalculate} />
               </View>
             </View>
@@ -439,6 +441,7 @@ const styles = StyleSheet.create({
   conditionalFields: { gap: 12, padding: 12, borderWidth: 1, borderRadius: 14 },
   twoColumns: { flexDirection: "row", gap: 12 },
   withUnit: { flexDirection: "row", alignItems: "center", gap: 7 },
+  actualSleepControl: { gap: 8 },
   numberInput: { flex: 1 },
   unit: { fontSize: 14, lineHeight: 20, fontWeight: "700" },
   scoreLegend: { flexDirection: "row", justifyContent: "space-between", marginTop: 7 },
