@@ -25,6 +25,7 @@ export type MetricSummary = {
   average: number | null;
   median: number | null;
   dataDays: number;
+  excludedLegacySleepRecords: number;
 };
 
 export type RelationKey =
@@ -44,6 +45,7 @@ export type RelationResult = {
   pairedCount: number;
   coefficient: number | null;
   status: "ready" | "insufficient" | "constant";
+  excludedLegacySleepRecords: number;
 };
 
 export type AnalysisQualityStatus = "empty" | "insufficient" | "reference" | "partial" | "sufficient";
@@ -53,6 +55,7 @@ export type AnalysisQuality = {
   totalRecords: number;
   personalRecords: number;
   excludedSampleRecords: number;
+  excludedLegacySleepRecords: number;
   validMetricRecords: number;
   missingMetricRecords: number;
   periodGroups: number;
@@ -72,8 +75,8 @@ export const MIN_RECOMMENDATION_RECORDS = 7;
 export const MIN_RECOMMENDATION_SLEEP_MINUTES = 7 * 60;
 
 export type SleepRecommendation =
-  | { status: "insufficient"; qualifyingDays: number; minimumDays: number }
-  | { status: "tooShort"; qualifyingDays: number; targetSleepMinutes: number }
+  | { status: "insufficient"; qualifyingDays: number; minimumDays: number; excludedLegacySleepRecords: number }
+  | { status: "tooShort"; qualifyingDays: number; targetSleepMinutes: number; excludedLegacySleepRecords: number }
   | {
       status: "ready";
       qualifyingDays: number;
@@ -81,6 +84,7 @@ export type SleepRecommendation =
       bedTime: string;
       wakeTime: string;
       criteria: string;
+      excludedLegacySleepRecords: number;
     };
 
 const metricLabels: Record<AnalysisMetric, string> = {
@@ -108,8 +112,26 @@ export function recordsForPersonalAnalysis(records: SleepRecord[]) {
   return records.filter((record) => !record.isSample);
 }
 
+/**
+ * `legacy` sleepMinutes have an unknown historical meaning. Analyses that
+ * require actual sleep must not infer or convert them; only explicit
+ * actualSleep records may enter those calculations.
+ */
+export function recordsForActualSleepAnalysis(records: SleepRecord[]) {
+  const personalRecords = recordsForPersonalAnalysis(records);
+  const actualSleepRecords = personalRecords.filter((record) => record.sleepDurationDefinition === "actualSleep");
+  return {
+    records: actualSleepRecords,
+    excludedLegacySleepRecords: personalRecords.length - actualSleepRecords.length,
+  };
+}
+
 export function getAnalysisMetricValue(record: SleepRecord, metric: AnalysisMetric): number | null {
   switch (metric) {
+    case "sleepMinutes":
+      return record.sleepDurationDefinition === "actualSleep" && Number.isFinite(record.sleepMinutes)
+        ? record.sleepMinutes
+        : null;
     case "bedTime":
       return clockValueForChart(record.bedTime, true);
     case "wakeTime":
@@ -165,7 +187,10 @@ function groupFor(date: string, granularity: AnalysisGranularity) {
 /** Aggregates only valid values; empty groups stay null and are never coerced to zero. */
 export function buildTrend(records: SleepRecord[], metric: AnalysisMetric, granularity: AnalysisGranularity): TrendPoint[] {
   const groups = new Map<string, { label: string; recordDays: number; values: number[] }>();
-  recordsForPersonalAnalysis(records).slice().sort((a, b) => a.date.localeCompare(b.date)).forEach((record) => {
+  const analysisRecords = metric === "sleepMinutes"
+    ? recordsForActualSleepAnalysis(records).records
+    : recordsForPersonalAnalysis(records);
+  analysisRecords.slice().sort((a, b) => a.date.localeCompare(b.date)).forEach((record) => {
     const group = groupFor(record.date, granularity);
     const current = groups.get(group.key) ?? { label: group.label, recordDays: 0, values: [] };
     current.recordDays += 1;
@@ -181,9 +206,9 @@ export function buildTrend(records: SleepRecord[], metric: AnalysisMetric, granu
   }));
 }
 
-export function summarizeTrend(points: TrendPoint[]): MetricSummary {
+export function summarizeTrend(points: TrendPoint[], excludedLegacySleepRecords = 0): MetricSummary {
   const values = points.flatMap((point) => point.value === null ? [] : [point.value]);
-  return { average: values.length ? mean(values) : null, median: median(values), dataDays: values.length };
+  return { average: values.length ? mean(values) : null, median: median(values), dataDays: values.length, excludedLegacySleepRecords };
 }
 
 function granularityLabel(granularity: AnalysisGranularity) {
@@ -210,14 +235,17 @@ export function assessAnalysisQuality(
   relations: RelationResult[],
 ): AnalysisQuality {
   const personalRecords = recordsForPersonalAnalysis(records);
+  const actualSleep = recordsForActualSleepAnalysis(records);
+  const metricRecords = metric === "sleepMinutes" ? actualSleep.records : personalRecords;
   const trend = buildTrend(records, metric, granularity);
-  const validMetricRecords = personalRecords.filter((record) => getAnalysisMetricValue(record, metric) !== null).length;
-  const missingMetricRecords = personalRecords.length - validMetricRecords;
+  const validMetricRecords = metricRecords.filter((record) => getAnalysisMetricValue(record, metric) !== null).length;
+  const missingMetricRecords = metricRecords.length - validMetricRecords;
   const base = {
-    periodLabel: periodLabel(personalRecords, granularity),
+    periodLabel: periodLabel(metricRecords, granularity),
     totalRecords: records.length,
     personalRecords: personalRecords.length,
     excludedSampleRecords: records.length - personalRecords.length,
+    excludedLegacySleepRecords: metric === "sleepMinutes" ? actualSleep.excludedLegacySleepRecords : 0,
     validMetricRecords,
     missingMetricRecords,
     periodGroups: trend.length,
@@ -233,10 +261,10 @@ export function assessAnalysisQuality(
   return { ...base, status: "sufficient", statusLabel: "十分なデータ", message: `「${base.metricLabel}」は ${validMetricRecords} 件の個人記録を使っています。` };
 }
 
-function relationResult(key: RelationKey, label: string, xLabel: string, yLabel: string, pairs: { x: number; y: number }[]): RelationResult {
-  if (pairs.length < MIN_RELATION_RECORDS) return { key, label, xLabel, yLabel, pairedCount: pairs.length, coefficient: null, status: "insufficient" };
+function relationResult(key: RelationKey, label: string, xLabel: string, yLabel: string, pairs: { x: number; y: number }[], excludedLegacySleepRecords = 0): RelationResult {
+  if (pairs.length < MIN_RELATION_RECORDS) return { key, label, xLabel, yLabel, pairedCount: pairs.length, coefficient: null, status: "insufficient", excludedLegacySleepRecords };
   const coefficient = correlation(pairs);
-  return { key, label, xLabel, yLabel, pairedCount: pairs.length, coefficient, status: coefficient === null ? "constant" : "ready" };
+  return { key, label, xLabel, yLabel, pairedCount: pairs.length, coefficient, status: coefficient === null ? "constant" : "ready", excludedLegacySleepRecords };
 }
 
 function pairedMetric(records: SleepRecord[], x: AnalysisMetric, y: AnalysisMetric) {
@@ -257,13 +285,15 @@ function consecutiveDay(previous: string, current: string) {
 
 export function analyzeRelation(records: SleepRecord[], key: RelationKey): RelationResult {
   const ordered = recordsForPersonalAnalysis(records).slice().sort((a, b) => a.date.localeCompare(b.date));
+  const actualSleep = recordsForActualSleepAnalysis(records);
+  const actualSleepOrdered = actualSleep.records.slice().sort((a, b) => a.date.localeCompare(b.date));
   switch (key) {
     case "sleepSleepiness":
-      return relationResult(key, "睡眠時間と眠気", "睡眠時間", "眠気", pairedMetric(ordered, "sleepMinutes", "sleepiness"));
+      return relationResult(key, "睡眠時間と眠気", "睡眠時間", "眠気", pairedMetric(actualSleepOrdered, "sleepMinutes", "sleepiness"), actualSleep.excludedLegacySleepRecords);
     case "sleepClarity":
-      return relationResult(key, "睡眠時間と頭の冴え", "睡眠時間", "頭の冴え", pairedMetric(ordered, "sleepMinutes", "clarity"));
+      return relationResult(key, "睡眠時間と頭の冴え", "睡眠時間", "頭の冴え", pairedMetric(actualSleepOrdered, "sleepMinutes", "clarity"), actualSleep.excludedLegacySleepRecords);
     case "napSleep":
-      return relationResult(key, "昼寝と夜の睡眠", "昼寝時間", "夜の睡眠時間", pairedMetric(ordered, "napMinutes", "sleepMinutes"));
+      return relationResult(key, "昼寝と夜の睡眠", "昼寝時間", "夜の睡眠時間", pairedMetric(actualSleepOrdered, "napMinutes", "sleepMinutes"), actualSleep.excludedLegacySleepRecords);
     case "pressureHeadache":
       return relationResult(key, "気圧と頭痛", "気圧", "頭痛の強さ", pairedMetric(ordered, "pressureHpa", "headacheIntensity"));
     case "pressureChangeHeadache": {
@@ -281,24 +311,26 @@ export function analyzeRelation(records: SleepRecord[], key: RelationKey): Relat
     case "caffeineTimeSleep":
     case "caffeineTimeSleepiness": {
       const yMetric: AnalysisMetric = key === "caffeineTimeSleep" ? "sleepMinutes" : "sleepiness";
-      const pairs = ordered.flatMap((record) => {
+      const usesActualSleep = yMetric === "sleepMinutes";
+      const pairs = (usesActualSleep ? actualSleepOrdered : ordered).flatMap((record) => {
         const time = record.caffeine && record.caffeineTime ? timeToMinutes(record.caffeineTime) : null;
         const y = getAnalysisMetricValue(record, yMetric);
         return time === null || y === null ? [] : [{ x: time, y }];
       });
-      return relationResult(key, key === "caffeineTimeSleep" ? "カフェイン時刻と睡眠" : "カフェイン時刻と眠気", "カフェイン摂取時刻", yMetric === "sleepMinutes" ? "睡眠時間" : "眠気", pairs);
+      return relationResult(key, key === "caffeineTimeSleep" ? "カフェイン時刻と睡眠" : "カフェイン時刻と眠気", "カフェイン摂取時刻", yMetric === "sleepMinutes" ? "睡眠時間" : "眠気", pairs, usesActualSleep ? actualSleep.excludedLegacySleepRecords : 0);
     }
   }
 }
 
 export function buildSleepRecommendation(records: SleepRecord[]): SleepRecommendation {
-  const qualifying = recordsForPersonalAnalysis(records).filter((record) => record.sleepiness <= 3 && record.clarity >= 7);
+  const actualSleep = recordsForActualSleepAnalysis(records);
+  const qualifying = actualSleep.records.filter((record) => record.sleepiness <= 3 && record.clarity >= 7);
   if (qualifying.length < MIN_RECOMMENDATION_RECORDS) {
-    return { status: "insufficient", qualifyingDays: qualifying.length, minimumDays: MIN_RECOMMENDATION_RECORDS };
+    return { status: "insufficient", qualifyingDays: qualifying.length, minimumDays: MIN_RECOMMENDATION_RECORDS, excludedLegacySleepRecords: actualSleep.excludedLegacySleepRecords };
   }
   const targetSleepMinutes = Math.round(median(qualifying.map((record) => record.sleepMinutes)) ?? 0);
   if (targetSleepMinutes < MIN_RECOMMENDATION_SLEEP_MINUTES) {
-    return { status: "tooShort", qualifyingDays: qualifying.length, targetSleepMinutes };
+    return { status: "tooShort", qualifyingDays: qualifying.length, targetSleepMinutes, excludedLegacySleepRecords: actualSleep.excludedLegacySleepRecords };
   }
   const bed = median(qualifying.map((record) => clockValueForChart(record.bedTime, true))) ?? 0;
   const wake = median(qualifying.map((record) => clockValueForChart(record.wakeTime))) ?? 0;
@@ -307,7 +339,8 @@ export function buildSleepRecommendation(records: SleepRecord[]): SleepRecommend
     qualifyingDays: qualifying.length,
     targetSleepMinutes,
     bedTime: formatClockValue(bed),
-    wakeTime: formatClockValue(wake),
-    criteria: `眠気が 3 / 10 以下、頭の冴えが 7 / 10 以上だった ${qualifying.length} 日`,
+      wakeTime: formatClockValue(wake),
+      criteria: `眠気が 3 / 10 以下、頭の冴えが 7 / 10 以上だった ${qualifying.length} 日`,
+      excludedLegacySleepRecords: actualSleep.excludedLegacySleepRecords,
   };
 }

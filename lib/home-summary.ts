@@ -18,6 +18,7 @@ export type HomeComparison = {
   baselineEnd: string;
   lookbackDays: number;
   minimumRecords: number;
+  excludedLegacySleepRecords: number;
 };
 
 function localDayOffset(key: string, offset: number) {
@@ -55,8 +56,11 @@ export function buildHomeComparison(
   const baselineEnd = localDayOffset(today, -1);
   const personal = records.filter((record) => !record.isSample);
   const baseline = personal.filter((record) => record.date >= baselineStart && record.date <= baselineEnd);
+  const actualSleepBaseline = baseline.filter((record) => record.sleepDurationDefinition === "actualSleep");
+  const todaySleepRecord = personal.find((record) => record.date === today && record.sleepDurationDefinition === "actualSleep");
   const todayRecord = personal.find((record) => record.date === today);
   const sleepValues = baseline
+    .filter((record) => record.sleepDurationDefinition === "actualSleep")
     .map((record) => record.sleepMinutes)
     .filter((value) => Number.isFinite(value) && value > 0);
   const fatigueValues = baseline
@@ -68,12 +72,13 @@ export function buildHomeComparison(
     baselineEnd,
     lookbackDays,
     minimumRecords,
+    excludedLegacySleepRecords: actualSleepBaseline.length === baseline.length ? 0 : baseline.length - actualSleepBaseline.length,
     rows: [
       {
         key: "sleep",
         label: "睡眠",
         usual: usualValue(sleepValues, (value) => formatDuration(value, true), minimumRecords),
-        today: todayRecord && todayRecord.sleepMinutes > 0 ? formatDuration(todayRecord.sleepMinutes, true) : "記録なし",
+        today: todaySleepRecord && todaySleepRecord.sleepMinutes > 0 ? formatDuration(todaySleepRecord.sleepMinutes, true) : "記録なし",
         validDays: sleepValues.length,
         supported: true,
       },

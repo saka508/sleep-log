@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { analyzeSleepConditionComparison, type CrossAnalysisQuery } from "../lib/cross-analysis";
+import { dailyConditionFromSleepRecord } from "../lib/condition-model";
 import { recordsFromCsv, recordsToCsv } from "../lib/csv-core";
 import { buildTrend } from "../lib/condition-analysis";
 import { actualSleepMinutesFromTimes, normalizeSleepRecord, timeInBedMinutesFromTimes, type SleepRecord } from "../lib/sleep-utils";
@@ -62,7 +63,8 @@ describe("time in bed and actual sleep definitions", () => {
   it("does not rewrite or double-subtract an existing legacy record", () => {
     const legacy = normalizeSleepRecord(record({ sleepMinutes: 510, latencyMinutes: 30 }));
     expect(legacy).toMatchObject({ sleepMinutes: 510, sleepDurationDefinition: "legacy", latencyMinutes: 30 });
-    expect(buildTrend([legacy!], "sleepMinutes", "day")[0]).toMatchObject({ value: 510 });
+    expect(buildTrend([legacy!], "sleepMinutes", "day")).toEqual([]);
+    expect(dailyConditionFromSleepRecord(legacy!).sleep).toMatchObject({ sleepMinutes: 510, sleepDurationDefinition: "legacy", latencyMinutes: 30 });
   });
 
   it("keeps a missing latency distinct from a recorded zero", () => {

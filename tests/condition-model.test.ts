@@ -13,6 +13,7 @@ function sleepRecord(overrides: Partial<SleepRecord> = {}): SleepRecord {
     bedTime: "23:30",
     wakeTime: "07:00",
     sleepMinutes: 450,
+    sleepDurationDefinition: "actualSleep",
     latencyMinutes: 20,
     napMinutes: 0,
     sleepiness: 4,
@@ -39,6 +40,7 @@ describe("daily condition compatibility model", () => {
         bedTime: "23:30",
         wakeTime: "07:00",
         sleepMinutes: 450,
+        sleepDurationDefinition: "actualSleep",
         latencyMinutes: 20,
         napMinutes: 0,
       },
@@ -74,6 +76,11 @@ describe("daily condition compatibility model", () => {
 
   it("keeps empty notes optional in the new model", () => {
     expect(dailyConditionFromSleepRecord(sleepRecord({ note: "" })).note).toBeUndefined();
+  });
+
+  it("keeps legacy and actual-sleep provenance in the read-only daily model", () => {
+    expect(dailyConditionFromSleepRecord(sleepRecord({ sleepDurationDefinition: "legacy" })).sleep).toMatchObject({ sleepDurationDefinition: "legacy" });
+    expect(dailyConditionFromSleepRecord(sleepRecord({ sleepDurationDefinition: "actualSleep" })).sleep).toMatchObject({ sleepDurationDefinition: "actualSleep" });
   });
 
   it("maps optional fatigue values without turning absent values into zero", () => {

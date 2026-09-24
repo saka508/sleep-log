@@ -11,6 +11,7 @@ import {
   pressureHistoryToBackupJson,
   PRESSURE_HISTORY_SOURCE,
   PRESSURE_REFERENCE_TOLERANCE_MS,
+  selectPressureHistoryPeriod,
   type PressureHistoryPoint,
 } from "../lib/pressure-history";
 
@@ -153,5 +154,50 @@ describe("pressure history calculations", () => {
     expect(restored.batches).toEqual([expect.objectContaining({ id: "backup-batch" })]);
     expect(() => pressureHistoryFromBackupJson(JSON.stringify({ format: "other", version: 1 }))).toThrow("Invalid pressure history backup");
     expect(createPressureHistoryBatchId(1234, 0.5)).toMatch(/^pressure-/);
+  });
+
+  it("selects retained points by timestamp for each display period without joining batches", () => {
+    const oldBatch = createPressureHistoryBatch({
+      fetchedAt: "2026-09-01T12:00:00.000Z",
+      latestAvailableAt: "2026-09-01T12:00:00.000Z",
+      points: [point("2026-09-01T12:00:00.000Z", 1008)],
+    }, "old");
+    const weekBatch = createPressureHistoryBatch({
+      fetchedAt: "2026-09-18T12:00:00.000Z",
+      latestAvailableAt: "2026-09-18T12:00:00.000Z",
+      points: [point("2026-09-18T12:00:00.000Z", 1004)],
+    }, "week");
+    const latestBatch = createPressureHistoryBatch({
+      fetchedAt: "2026-09-20T03:00:00.000Z",
+      latestAvailableAt: "2026-09-20T03:00:00.000Z",
+      points: [
+        point("2026-09-19T03:00:00.000Z", 1007),
+        point("2026-09-20T00:00:00.000Z", 1005),
+        point("2026-09-20T03:00:00.000Z", 1004),
+      ],
+    }, "latest");
+    const batches = [oldBatch!, weekBatch!, latestBatch!];
+
+    const day = selectPressureHistoryPeriod(batches, "day");
+    expect(day.days).toBe(1);
+    expect(day.batches.map((batch) => batch.id)).toEqual(["latest"]);
+    expect(day.pointCount).toBe(3);
+    expect(day.latestBatch?.id).toBe("latest");
+    expect(calculatePressureChangesForBatch(day.latestBatch!).change3Hours?.changeHpa).toBe(-1);
+
+    const week = selectPressureHistoryPeriod(batches, "week");
+    expect(week.days).toBe(7);
+    expect(week.batches.map((batch) => batch.id)).toEqual(["week", "latest"]);
+    expect(week.pointCount).toBe(4);
+
+    const month = selectPressureHistoryPeriod(batches, "month");
+    expect(month.days).toBe(30);
+    expect(month.batches.map((batch) => batch.id)).toEqual(["old", "week", "latest"]);
+    expect(month.pointCount).toBe(5);
+    expect(month.batches).not.toBe(batches);
+  });
+
+  it("does not invent a period when no valid retained pressure point exists", () => {
+    expect(selectPressureHistoryPeriod([], "month")).toMatchObject({ pointCount: 0, latestBatch: null, startAt: null, endAt: null });
   });
 });

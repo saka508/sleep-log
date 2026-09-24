@@ -43,6 +43,7 @@ export default function HistoryScreen() {
               <Text style={[styles.rowMeta, { color: colors.muted }]}>{item.bedTime} → {item.wakeTime}　寝つき {item.latencyMinutes === undefined ? "未記録" : `${item.latencyMinutes}分`}</Text>
               <View style={styles.tags}>
                 {item.napMinutes > 0 ? <Text style={[styles.tag, { color: colors.primary, backgroundColor: `${colors.primary}12` }]}>昼寝 {item.napMinutes}分</Text> : null}
+                {item.sleepDurationDefinition !== "actualSleep" ? <Text style={[styles.tag, { color: colors.muted, backgroundColor: `${colors.muted}14` }]}>睡眠時間（旧定義）</Text> : null}
                 {item.caffeine ? <Text style={[styles.tag, { color: colors.warning, backgroundColor: `${colors.warning}14` }]}>カフェイン</Text> : null}
                 {item.headache ? <Text style={[styles.tag, { color: colors.error, backgroundColor: `${colors.error}12` }]}>頭痛</Text> : null}
               </View>

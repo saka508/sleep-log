@@ -7,7 +7,6 @@ import {
   DataQualityCard,
   EnvironmentPanel,
   HeadachePanel,
-  RelationCard,
   SleepPanel,
   type AnalysisCategory,
   type CategoryTrends,
@@ -16,14 +15,12 @@ import { AppTextInput, Card, PageHeader, PrimaryButton, SegmentedControl, SmallS
 import { ScreenContainer } from "@/components/screen-container";
 import { Collapsible } from "@/components/ui/collapsible";
 import { useColors } from "@/hooks/use-colors";
-import { analyzeRelation, assessAnalysisQuality, buildSleepRecommendation, buildTrend, MIN_RECOMMENDATION_SLEEP_MINUTES, summarizeTrend, type AnalysisGranularity, type AnalysisMetric, type RelationKey } from "@/lib/condition-analysis";
+import { assessAnalysisQuality, buildSleepRecommendation, buildTrend, recordsForActualSleepAnalysis, MIN_RECOMMENDATION_SLEEP_MINUTES, summarizeTrend, type AnalysisGranularity, type AnalysisMetric } from "@/lib/condition-analysis";
 import { useHeadacheEvents } from "@/lib/headache-store";
-import { calculatePressureChangesForBatch } from "@/lib/pressure-history";
+import { calculatePressureChangesForBatch, selectPressureHistoryPeriod } from "@/lib/pressure-history";
 import { usePressureHistory } from "@/lib/pressure-history-store";
 import { useSleepData } from "@/lib/sleep-store";
 import { formatDuration, isTime } from "@/lib/sleep-utils";
-
-const RELATIONS: RelationKey[] = ["sleepSleepiness", "sleepClarity", "napSleep", "pressureHeadache", "pressureChangeHeadache", "caffeineTimeSleep", "caffeineTimeSleepiness"];
 
 function parseCategory(value: string | string[] | undefined): AnalysisCategory {
   const candidate = Array.isArray(value) ? value[0] : value;
@@ -60,6 +57,7 @@ export default function AnalysisDetailScreen() {
   const { batches, isReady: pressureHistoryReady } = usePressureHistory();
   const [metric, setMetric] = useState<AnalysisMetric>(QUALITY_METRICS[category]);
   const personalRecords = useMemo(() => records.filter((record) => !record.isSample), [records]);
+  const actualSleep = useMemo(() => recordsForActualSleepAnalysis(records), [records]);
   const trends: CategoryTrends = useMemo(() => ({
     sleep: buildTrend(records, "sleepMinutes", granularity),
     nap: buildTrend(records, "napMinutes", granularity),
@@ -70,17 +68,21 @@ export default function AnalysisDetailScreen() {
     headache: buildTrend(records, "headacheIntensity", granularity),
     pressure: buildTrend(records, "pressureHpa", granularity),
   }), [records, granularity]);
-  const relations = useMemo(() => RELATIONS.map((key) => analyzeRelation(records, key)), [records]);
-  const quality = useMemo(() => assessAnalysisQuality(records, metric, granularity, relations), [records, metric, granularity, relations]);
-  const latestPressureBatch = batches[0];
-  const latestPressureChanges = useMemo(() => latestPressureBatch ? calculatePressureChangesForBatch(latestPressureBatch) : {}, [latestPressureBatch]);
+  // This uses only retained points; it never fabricates older values and it
+  // keeps opaque fetch batches apart because a batch can represent another location.
+  const pressurePeriod = useMemo(() => selectPressureHistoryPeriod(batches, granularity), [batches, granularity]);
+  const quality = useMemo(() => assessAnalysisQuality(records, metric, granularity, []), [records, metric, granularity]);
+  const latestPressureChanges = useMemo(
+    () => pressurePeriod.latestBatch ? calculatePressureChangesForBatch(pressurePeriod.latestBatch) : {},
+    [pressurePeriod.latestBatch],
+  );
   const caffeineRecords = useMemo(() => personalRecords.filter((record) => record.caffeine && record.caffeineTime), [personalRecords]);
   const categoryHasData = useMemo(() => {
     if (category === "sleep") return trends.sleep.some((point) => point.value !== null);
     if (category === "condition") return [trends.sleepiness, trends.fatigue, trends.clarity, trends.muscleFatigue].some((points) => points.some((point) => point.value !== null));
     if (category === "headache") return personalRecords.some((record) => record.headache) || events.length > 0;
-    return Boolean(latestPressureBatch) || caffeineRecords.length > 0;
-  }, [category, trends, personalRecords, events.length, latestPressureBatch, caffeineRecords.length]);
+    return pressurePeriod.pointCount > 0 || caffeineRecords.length > 0;
+  }, [category, trends, personalRecords, events.length, pressurePeriod.pointCount, caffeineRecords.length]);
   const recommendation = useMemo(() => buildSleepRecommendation(records), [records]);
   const [bedTimeOverride, setBedTime] = useState<string | null>(null);
   const [wakeTimeOverride, setWakeTime] = useState<string | null>(null);
@@ -129,24 +131,19 @@ export default function AnalysisDetailScreen() {
     <View style={[styles.surface, { backgroundColor: colors.background }]}>
     <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <PageHeader title={CATEGORY_TITLES[category]} subtitle="分析トップから選んだ項目を詳しく表示" action={<PrimaryButton label="分析トップ" secondary onPress={() => router.back()} />} />
-      <Card style={styles.periodCard}><View style={styles.periodHeader}><Text style={[styles.periodTitle, { color: colors.foreground }]}>表示期間</Text><SmallStatus label={`${personalRecords.length}日`} tone="muted" /></View><SegmentedControl value={granularity} onChange={setGranularity} options={[{ value: "day", label: "日別" }, { value: "week", label: "週別" }, { value: "month", label: "月別" }]} /></Card>
+      <Card style={styles.periodCard}><View style={styles.periodHeader}><Text style={[styles.periodTitle, { color: colors.foreground }]}>表示期間</Text><SmallStatus label={category === "environment" ? `${pressurePeriod.days}日` : `${personalRecords.length}日`} tone="muted" /></View><SegmentedControl value={granularity} onChange={setGranularity} options={[{ value: "day", label: "日別" }, { value: "week", label: "週別" }, { value: "month", label: "月別" }]} /></Card>
       {categoryHasData ? <>
-        {category === "sleep" ? <SleepPanel trends={trends} records={personalRecords} granularity={granularity} metric={metric} setMetric={setMetric} summary={summarizeTrend(trends.sleep)} colors={colors} /> : null}
+        {category === "sleep" ? <SleepPanel trends={trends} records={personalRecords} granularity={granularity} metric={metric} setMetric={setMetric} summary={summarizeTrend(trends.sleep, actualSleep.excludedLegacySleepRecords)} colors={colors} /> : null}
         {category === "condition" ? <ConditionPanel trends={trends} colors={colors} /> : null}
         {category === "headache" ? <HeadachePanel events={events} dailyHeadacheDays={personalRecords.filter((record) => record.headache).length} personalRecords={personalRecords} trends={trends} colors={colors} /> : null}
-        {category === "environment" ? <EnvironmentPanel latestPressureBatch={latestPressureBatch} latestPressureChanges={latestPressureChanges} caffeineRecords={caffeineRecords} colors={colors} /> : null}
+        {category === "environment" ? <EnvironmentPanel pressurePeriod={pressurePeriod} latestPressureChanges={latestPressureChanges} caffeineRecords={caffeineRecords} colors={colors} /> : null}
       </> : <CategoryEmptyState category={category} colors={colors} />}
       <DataQualityCard quality={quality} />
-      <CollapsibleRelations relations={relations} />
       {category === "sleep" ? <SleepRecommendation recommendation={recommendation} settings={settings} updateSettings={updateSettings} bedTime={bedTime} wakeTime={wakeTime} sleepMinutes={sleepMinutes} setBedTime={setBedTime} setWakeTime={setWakeTime} setSleepMinutes={setSleepMinutes} toggleRecommendation={toggleRecommendation} saveOverrides={saveOverrides} isSavingRecommendation={isSavingRecommendation} /> : null}
       <View style={[styles.disclaimer, { backgroundColor: `${colors.muted}12` }]}><Text style={[styles.disclaimerText, { color: colors.muted }]}>この分析は個人記録の振り返りであり、診断ではありません。</Text></View>
     </ScrollView>
     </View>
   </ScreenContainer>;
-}
-
-function CollapsibleRelations({ relations }: { relations: ReturnType<typeof analyzeRelation>[] }) {
-  return <Collapsible title="関連分析を見る"><View style={styles.relations}>{relations.map((relation) => <RelationCard key={relation.key} relation={relation} />)}</View><Text style={styles.relationNote}>Pearsonの相関係数を使用し、5組未満・値のばらつきがない場合は算出しません。相関は関連の目安であり、原因を示すものではありません。</Text></Collapsible>;
 }
 
 function CategoryEmptyState({ category, colors }: { category: AnalysisCategory; colors: ReturnType<typeof useColors> }) {
@@ -156,7 +153,7 @@ function CategoryEmptyState({ category, colors }: { category: AnalysisCategory; 
 
 function SleepRecommendation({ recommendation, settings, updateSettings, bedTime, wakeTime, sleepMinutes, setBedTime, setWakeTime, setSleepMinutes, toggleRecommendation, saveOverrides, isSavingRecommendation }: { recommendation: ReturnType<typeof buildSleepRecommendation>; settings: ReturnType<typeof useSleepData>["settings"]; updateSettings: ReturnType<typeof useSleepData>["updateSettings"]; bedTime: string; wakeTime: string; sleepMinutes: string; setBedTime: (value: string) => void; setWakeTime: (value: string) => void; setSleepMinutes: (value: string) => void; toggleRecommendation: () => void; saveOverrides: () => void; isSavingRecommendation: boolean }) {
   const colors = useColors();
-  return <Collapsible title="参考就寝・起床時刻"><Card style={styles.recommendationCard}><ToggleRow icon="auto-awesome" label="参考値を表示" description="いつでも無効にできます" active={settings.recommendationEnabled} onPress={toggleRecommendation} />{!settings.recommendationEnabled ? <Text style={[styles.note, { color: colors.muted }]}>参考値の表示は無効です。</Text> : null}{settings.recommendationEnabled && recommendation.status === "ready" ? <><Text style={[styles.recommendationTitle, { color: colors.foreground }]}>過去の記録から見た参考値</Text><Text style={[styles.recommendationReason, { color: colors.muted }]}>{recommendation.criteria} を条件にしています。対象 {recommendation.qualifyingDays} 日。</Text><View style={styles.recommendationGrid}><View style={styles.recommendationValue}><Text style={[styles.recommendationLabel, { color: colors.muted }]}>就寝</Text><Text style={[styles.recommendationNumber, { color: colors.primary }]}>{bedTime}</Text></View><View style={styles.recommendationValue}><Text style={[styles.recommendationLabel, { color: colors.muted }]}>起床</Text><Text style={[styles.recommendationNumber, { color: colors.primary }]}>{wakeTime}</Text></View><View style={styles.recommendationValue}><Text style={[styles.recommendationLabel, { color: colors.muted }]}>睡眠</Text><Text style={[styles.recommendationNumber, { color: colors.primary }]}>{formatDuration(Number(sleepMinutes), true)}</Text></View></View><View style={styles.editRow}><AppTextInput value={bedTime} onChangeText={setBedTime} maxLength={5} keyboardType="numbers-and-punctuation" /><AppTextInput value={wakeTime} onChangeText={setWakeTime} maxLength={5} keyboardType="numbers-and-punctuation" /><AppTextInput value={sleepMinutes} onChangeText={setSleepMinutes} keyboardType="number-pad" /></View><PrimaryButton label={isSavingRecommendation ? "保存中…" : "調整した参考値を保存"} icon="save" secondary loading={isSavingRecommendation} onPress={saveOverrides} /></> : null}{settings.recommendationEnabled && recommendation.status === "insufficient" ? <Text style={[styles.note, { color: colors.muted }]}>必要な記録数 {recommendation.minimumDays} 日に対して {recommendation.qualifyingDays} 日です。</Text> : null}</Card></Collapsible>;
+  return <Collapsible title="参考就寝・起床時刻"><Card style={styles.recommendationCard}><ToggleRow icon="auto-awesome" label="参考値を表示" description="いつでも無効にできます" active={settings.recommendationEnabled} onPress={toggleRecommendation} />{!settings.recommendationEnabled ? <Text style={[styles.note, { color: colors.muted }]}>参考値の表示は無効です。</Text> : null}{settings.recommendationEnabled && recommendation.status === "ready" ? <><Text style={[styles.recommendationTitle, { color: colors.foreground }]}>過去の記録から見た参考値</Text><Text style={[styles.recommendationReason, { color: colors.muted }]}>{recommendation.criteria} を条件にしています。対象 {recommendation.qualifyingDays} 日。</Text><View style={styles.recommendationGrid}><View style={styles.recommendationValue}><Text style={[styles.recommendationLabel, { color: colors.muted }]}>就寝</Text><Text style={[styles.recommendationNumber, { color: colors.primary }]}>{bedTime}</Text></View><View style={styles.recommendationValue}><Text style={[styles.recommendationLabel, { color: colors.muted }]}>起床</Text><Text style={[styles.recommendationNumber, { color: colors.primary }]}>{wakeTime}</Text></View><View style={styles.recommendationValue}><Text style={[styles.recommendationLabel, { color: colors.muted }]}>睡眠</Text><Text style={[styles.recommendationNumber, { color: colors.primary }]}>{formatDuration(Number(sleepMinutes), true)}</Text></View></View><View style={styles.editRow}><AppTextInput value={bedTime} onChangeText={setBedTime} maxLength={5} keyboardType="numbers-and-punctuation" /><AppTextInput value={wakeTime} onChangeText={setWakeTime} maxLength={5} keyboardType="numbers-and-punctuation" /><AppTextInput value={sleepMinutes} onChangeText={setSleepMinutes} keyboardType="number-pad" /></View><PrimaryButton label={isSavingRecommendation ? "保存中…" : "調整した参考値を保存"} icon="save" secondary loading={isSavingRecommendation} onPress={saveOverrides} /></> : null}{settings.recommendationEnabled && recommendation.status === "insufficient" ? <Text style={[styles.note, { color: colors.muted }]}>必要な記録数 {recommendation.minimumDays} 日に対して {recommendation.qualifyingDays} 日です。</Text> : null}{recommendation.excludedLegacySleepRecords ? <Text style={[styles.note, { color: colors.muted }]}>旧定義の睡眠時間 {recommendation.excludedLegacySleepRecords} 件は参考値の計算から除外しています。</Text> : null}</Card></Collapsible>;
 }
 
 const styles = StyleSheet.create({
