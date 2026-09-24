@@ -36,6 +36,7 @@ export type CrossAnalysisQuery = {
 
 export type CrossAnalysisExclusions = {
   sampleRecords: number;
+  legacySleepDuration: number;
   outsidePeriod: number;
   invalidDate: number;
   invalidSleepMinutes: number;
@@ -141,6 +142,7 @@ function buildGroup(observations: CrossAnalysisObservation[]): CrossAnalysisGrou
 function emptyExclusions(): CrossAnalysisExclusions {
   return {
     sampleRecords: 0,
+    legacySleepDuration: 0,
     outsidePeriod: 0,
     invalidDate: 0,
     invalidSleepMinutes: 0,
@@ -240,6 +242,10 @@ export function analyzeSleepConditionComparison(
     }
     if (record.date < query.period.startDate || record.date > query.period.endDate) {
       exclusions.outsidePeriod += 1;
+      continue;
+    }
+    if (record.sleepDurationDefinition !== "actualSleep") {
+      exclusions.legacySleepDuration += 1;
       continue;
     }
     if (!Number.isFinite(record.sleepMinutes) || record.sleepMinutes <= 0) {

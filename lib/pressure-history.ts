@@ -5,6 +5,16 @@ export const PRESSURE_HISTORY_BACKUP_FORMAT = "sleep-log.pressure-history";
 export const PRESSURE_HISTORY_RETENTION_DAYS = 30;
 export const MAX_PRESSURE_HISTORY_BATCHES = 100;
 
+export type PressureHistoryPeriod = "day" | "week" | "month";
+
+export const PRESSURE_HISTORY_PERIOD_DAYS: Record<PressureHistoryPeriod, number> = {
+  day: 1,
+  week: 7,
+  // This is the persisted-history retention boundary, not a newly invented
+  // analytics window.
+  month: PRESSURE_HISTORY_RETENTION_DAYS,
+};
+
 export type PressureKind = "surface_pressure" | "pressure_msl";
 
 /**
@@ -138,6 +148,16 @@ export type PressureHistoryStoreV1 = {
   batches: PressureHistoryBatch[];
 };
 
+export type PressureHistoryPeriodSelection = {
+  period: PressureHistoryPeriod;
+  days: number;
+  startAt: string | null;
+  endAt: string | null;
+  batches: PressureHistoryBatch[];
+  pointCount: number;
+  latestBatch: PressureHistoryBatch | null;
+};
+
 type PressureHistoryBackupV1 = {
   format: typeof PRESSURE_HISTORY_BACKUP_FORMAT;
   version: 1;
@@ -242,6 +262,48 @@ export function calculatePressureChangesForBatch(batch: PressureHistoryBatch) {
     locationScope: batch.id,
     source: batch.source,
   })));
+}
+
+/**
+ * Selects only stored points in a local-independent timestamp window. Batches
+ * stay separate because their opaque IDs are location boundaries; callers
+ * must not draw a continuous line across them.
+ */
+export function selectPressureHistoryPeriod(
+  input: PressureHistoryBatch[],
+  period: PressureHistoryPeriod,
+): PressureHistoryPeriodSelection {
+  const days = PRESSURE_HISTORY_PERIOD_DAYS[period];
+  const allPoints = input.flatMap((batch) => batch.points.map((point) => ({ batch, point, timestamp: Date.parse(point.observedAt) })))
+    .filter(({ timestamp }) => Number.isFinite(timestamp));
+  const endTimestamp = allPoints.reduce((latest, entry) => Math.max(latest, entry.timestamp), Number.NEGATIVE_INFINITY);
+  if (!Number.isFinite(endTimestamp)) return { period, days, startAt: null, endAt: null, batches: [], pointCount: 0, latestBatch: null };
+
+  const startTimestamp = endTimestamp - days * 24 * 60 * 60 * 1000;
+  const batches = input.map((batch) => ({
+    ...batch,
+    points: batch.points.filter((point) => {
+      const timestamp = Date.parse(point.observedAt);
+      return Number.isFinite(timestamp) && timestamp >= startTimestamp && timestamp <= endTimestamp;
+    }),
+  })).filter((batch) => batch.points.length > 0)
+    .sort((a, b) => a.points[0].observedAt.localeCompare(b.points[0].observedAt));
+  const latestBatch = batches.reduce<PressureHistoryBatch | null>((latest, batch) => {
+    if (!latest) return batch;
+    const latestPoint = latest.points.at(-1)?.observedAt ?? "";
+    const batchPoint = batch.points.at(-1)?.observedAt ?? "";
+    return batchPoint > latestPoint ? batch : latest;
+  }, null);
+
+  return {
+    period,
+    days,
+    startAt: new Date(startTimestamp).toISOString(),
+    endAt: new Date(endTimestamp).toISOString(),
+    batches,
+    pointCount: batches.reduce((count, batch) => count + batch.points.length, 0),
+    latestBatch,
+  };
 }
 
 export function pressureHistoryToBackupJson(store: PressureHistoryStoreV1, exportedAt = new Date().toISOString()) {

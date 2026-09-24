@@ -81,6 +81,7 @@ function formatDifference(value: number | null) {
 function exclusionSummary(exclusions: ReturnType<typeof analyzeSleepConditionComparison>["exclusions"]) {
   const labels = [
     exclusions.sampleRecords ? `サンプル ${exclusions.sampleRecords}件` : null,
+    exclusions.legacySleepDuration ? `旧定義の睡眠時間 ${exclusions.legacySleepDuration}件` : null,
     exclusions.outsidePeriod ? `期間外 ${exclusions.outsidePeriod}件` : null,
     exclusions.invalidSleepMinutes ? `睡眠時間不正 ${exclusions.invalidSleepMinutes}件` : null,
     exclusions.missingOutcome ? `結果未記録 ${exclusions.missingOutcome}件` : null,

@@ -10,6 +10,7 @@ function record(date: string, overrides: Partial<SleepRecord> = {}): SleepRecord
     bedTime: "23:30",
     wakeTime: "07:00",
     sleepMinutes: 450,
+    sleepDurationDefinition: "actualSleep",
     latencyMinutes: 20,
     napMinutes: 0,
     sleepiness: 3,
@@ -45,6 +46,19 @@ describe("home comparison", () => {
 
     expect(result.rows[0]).toMatchObject({ usual: "データ不足", today: "記録なし", validDays: 0 });
     expect(result.rows[1]).toMatchObject({ usual: "データ不足", today: "未記録", validDays: 0 });
+  });
+
+  it("uses actual sleep only for the home sleep comparison while retaining other metrics", () => {
+    const result = buildHomeComparison([
+      record("2026-09-10", { sleepMinutes: 900, sleepDurationDefinition: "legacy", fatigue: 2 }),
+      record("2026-09-11", { sleepMinutes: 420, fatigue: 4 }),
+      record("2026-09-12", { sleepMinutes: 480, fatigue: 6 }),
+      record("2026-09-13", { sleepMinutes: 510, sleepDurationDefinition: "legacy", fatigue: 8 }),
+    ], "2026-09-13", { minimumRecords: 2 });
+
+    expect(result.rows[0]).toMatchObject({ usual: "7時間30分", today: "記録なし", validDays: 2 });
+    expect(result.rows[1]).toMatchObject({ usual: "4.0 / 10", today: "8 / 10", validDays: 3 });
+    expect(result.excludedLegacySleepRecords).toBe(1);
   });
 
   it("keeps fatigue zero and missing fatigue distinct", () => {

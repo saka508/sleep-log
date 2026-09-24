@@ -11,6 +11,11 @@ export type SleepCondition = {
   bedTime: string;
   wakeTime: string;
   sleepMinutes: number;
+  /**
+   * Read-only provenance for sleepMinutes. This is derived from SleepRecord
+   * and is intentionally not a new persisted DailyConditionRecord field.
+   */
+  sleepDurationDefinition: "legacy" | "actualSleep";
   latencyMinutes?: number;
   napMinutes?: number;
 };
@@ -100,6 +105,7 @@ export function dailyConditionFromSleepRecord(record: SleepRecord): DailyConditi
       bedTime: record.bedTime,
       wakeTime: record.wakeTime,
       sleepMinutes: record.sleepMinutes,
+      sleepDurationDefinition: record.sleepDurationDefinition === "actualSleep" ? "actualSleep" : "legacy",
       latencyMinutes: record.latencyMinutes,
       napMinutes: record.napMinutes,
     },

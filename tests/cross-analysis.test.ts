@@ -13,6 +13,7 @@ function record(date: string, overrides: Partial<SleepRecord> = {}): SleepRecord
     bedTime: "23:30",
     wakeTime: "07:00",
     sleepMinutes: 450,
+    sleepDurationDefinition: "actualSleep",
     latencyMinutes: 20,
     napMinutes: 0,
     sleepiness: 4,
@@ -112,6 +113,28 @@ describe("cross analysis condition comparison", () => {
 
     expect(result.exclusions).toMatchObject({ sampleRecords: 1, outsidePeriod: 1 });
     expect(result.evidence.eligibleRecordCount).toBe(4);
+  });
+
+  it("excludes legacy sleep durations without converting them or using their outcomes", () => {
+    const result = analyzeSleepConditionComparison([
+      record("2026-09-01", { sleepMinutes: 300, sleepiness: 10, sleepDurationDefinition: "legacy" }),
+      record("2026-09-02", { sleepMinutes: 360, sleepiness: 8 }),
+      record("2026-09-03", { sleepMinutes: 480, sleepiness: 2 }),
+    ], baseQuery);
+
+    expect(result.exclusions).toMatchObject({ legacySleepDuration: 1, invalidSleepMinutes: 0 });
+    expect(result.evidence.usedConditionDates).toEqual(["2026-09-02", "2026-09-03"]);
+    expect(result.groups.matched.observations).toEqual([expect.objectContaining({ sleepMinutes: 360, outcomeValue: 8 })]);
+  });
+
+  it("reports no eligible records when the selected period contains legacy sleep only", () => {
+    const result = analyzeSleepConditionComparison([
+      record("2026-09-01", { sleepMinutes: 510, sleepiness: 4, sleepDurationDefinition: "legacy" }),
+    ], baseQuery);
+
+    expect(result).toMatchObject({ status: "noEligibleRecords", exclusions: { legacySleepDuration: 1 }, averageDifference: null });
+    expect(result.groups.matched.count).toBe(0);
+    expect(result.groups.comparison.count).toBe(0);
   });
 
   it("keeps a recorded zero outcome but excludes an absent optional outcome", () => {

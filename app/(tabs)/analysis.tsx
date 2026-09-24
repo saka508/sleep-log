@@ -8,10 +8,10 @@ import { PressureHistoryChart } from "@/components/pressure-history-chart";
 import { Card, ChoicePills, MetricCard, PageHeader, SegmentedControl, SmallStatus } from "@/components/sleep-ui";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
-import { analyzeRelation, buildTrend, formatAnalysisMetric, getAnalysisMetricLabel, summarizeTrend, type AnalysisGranularity, type AnalysisMetric, type AnalysisQuality } from "@/lib/condition-analysis";
+import { analyzeRelation, buildTrend, formatAnalysisMetric, getAnalysisMetricLabel, recordsForActualSleepAnalysis, summarizeTrend, type AnalysisGranularity, type AnalysisMetric, type AnalysisQuality } from "@/lib/condition-analysis";
 import { Collapsible } from "@/components/ui/collapsible";
 import { useSleepData } from "@/lib/sleep-store";
-import { usePressureHistory } from "@/lib/pressure-history-store";
+import type { PressureHistoryPeriodSelection } from "@/lib/pressure-history";
 import { formatDuration, formatShortDate, getHeadacheFeatureLabel, timeToMinutes, type SleepRecord } from "@/lib/sleep-utils";
 
 const METRIC_OPTIONS: { value: AnalysisMetric; label: string }[] = [
@@ -26,11 +26,12 @@ export default function AnalysisScreen() {
   const [viewportHeight, setViewportHeight] = useState(0);
   const [contentHeight, setContentHeight] = useState(0);
   const personalRecords = useMemo(() => records.filter((record) => !record.isSample), [records]);
+  const actualSleep = useMemo(() => recordsForActualSleepAnalysis(records), [records]);
   const summaryTrends = useMemo(() => ({
-    sleep: summarizeTrend(buildTrend(records, "sleepMinutes", granularity)),
+    sleep: summarizeTrend(buildTrend(records, "sleepMinutes", granularity), actualSleep.excludedLegacySleepRecords),
     sleepiness: summarizeTrend(buildTrend(records, "sleepiness", granularity)),
     fatigue: summarizeTrend(buildTrend(records, "fatigue", granularity)),
-  }), [records, granularity]);
+  }), [records, granularity, actualSleep.excludedLegacySleepRecords]);
   const openCategory = (category: AnalysisCategory) => {
     // The generated typed-routes file is refreshed by Expo tooling; keep the
     // dynamic category route localized until that generated declaration updates.
@@ -113,7 +114,7 @@ export function SleepPanel({ trends, records, granularity, metric, setMetric, su
       <Text style={[styles.panelTitle, { color: colors.foreground }]}>睡眠時間の推移</Text>
       <TrendBars points={trends.sleep} formatValue={(value) => formatAnalysisMetric("sleepMinutes", value)} accent={colors.sleepBlue} />
       <View style={styles.statsGrid}><View style={styles.statBox}><MetricCard label="平均" value={formatAnalysisMetric("sleepMinutes", summary.average)} icon="functions" accent={colors.sleepBlue} /></View><View style={styles.statBox}><MetricCard label="中央値" value={formatAnalysisMetric("sleepMinutes", summary.median)} icon="vertical-align-center" accent={colors.sleepBlue} /></View><View style={styles.statBox}><MetricCard label="有効日数" value={`${summary.dataDays} 日`} icon="event-available" accent={colors.sleepBlue} /></View></View>
-      <Text style={[styles.note, { color: colors.muted }]}>欠損値は線や平均に含めず、「データなし」として扱います。</Text>
+      <Text style={[styles.note, { color: colors.muted }]}>欠損値は線や平均に含めず、「データなし」として扱います。{summary.excludedLegacySleepRecords ? ` 旧定義の睡眠時間 ${summary.excludedLegacySleepRecords} 件は実睡眠の分析から除外しています。` : ""}</Text>
     </Card>
     <Card style={styles.panelCard}><Text style={[styles.panelTitle, { color: colors.foreground }]}>就寝・起床の記録</Text><SleepIntervalList records={records} colors={colors} /></Card>
     <Collapsible title="睡眠の指標を詳しく見る"><Card style={styles.panelCard}><ChoicePills value={metric} onChange={setMetric} options={METRIC_OPTIONS.filter((option) => ["sleepMinutes", "bedTime", "wakeTime", "napMinutes"].includes(option.value))} /><Text style={[styles.chartTitle, { color: colors.foreground }]}>{getAnalysisMetricLabel(metric)}の推移</Text><ConditionTrendChart points={buildTrend(records, metric, granularity)} formatValue={(value) => formatAnalysisMetric(metric, value)} /></Card></Collapsible>
@@ -138,8 +139,9 @@ export function HeadachePanel({ events, dailyHeadacheDays, personalRecords, tren
   return <Card style={styles.panelCard}><Text style={[styles.panelTitle, { color: colors.foreground }]}>頭痛の記録</Text><View style={styles.statsGrid}><View style={styles.statBox}><MetricCard label="日次記録" value={personalRecords.length ? `${dailyHeadacheDays} 日` : "データなし"} icon="event" accent={colors.sleepHeadache} /></View><View style={styles.statBox}><MetricCard label="イベント" value={events.length ? `${events.length} 件` : "データなし"} icon="notifications-none" accent={colors.sleepHeadache} /></View></View><TrendBars points={trends.headache} formatValue={(value) => `${value.toFixed(1)} / 10`} accent={colors.sleepHeadache} title="日次頭痛強度" /><Text style={[styles.note, { color: colors.muted }]}>日次記録と頭痛イベントは別の保存元です。ここでは混在させず、個別に表示します。</Text>{recentEvents.length ? <View style={styles.eventList}>{recentEvents.map((event) => <View key={event.id} style={[styles.eventRow, { borderColor: colors.border }]}><Text style={[styles.eventDate, { color: colors.foreground }]}>{formatShortDate(event.date)} {new Date(event.startedAt).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}</Text><Text style={[styles.eventMeta, { color: colors.muted }]}>{event.severity === null ? "強さ 未入力" : `強さ ${event.severity} / 10`} · {event.symptoms.length ? event.symptoms.map(getHeadacheFeatureLabel).join("・") : "症状未入力"}</Text></View>)}</View> : <Text style={[styles.note, { color: colors.muted }]}>頭痛イベントはまだありません。</Text>}</Card>;
 }
 
-export function EnvironmentPanel({ latestPressureBatch, latestPressureChanges, caffeineRecords, colors }: { latestPressureBatch?: NonNullable<ReturnType<typeof usePressureHistory>["batches"]>[number]; latestPressureChanges: { change3Hours?: { changeHpa: number }; change24Hours?: { changeHpa: number } }; caffeineRecords: SleepRecord[]; colors: ReturnType<typeof useColors> }) {
-  return <><Card style={styles.panelCard}>{latestPressureBatch ? <><Text style={[styles.panelTitle, { color: colors.foreground }]}>気圧の時系列</Text><PressureHistoryChart batch={latestPressureBatch} /><View style={styles.statsGrid}><View style={styles.statBox}><MetricCard label="3時間変化" value={formatPressureChange(latestPressureChanges.change3Hours)} icon="trending-flat" accent={colors.sleepBlue} /></View><View style={styles.statBox}><MetricCard label="24時間変化" value={formatPressureChange(latestPressureChanges.change24Hours)} icon="trending-flat" accent={colors.sleepBlue} /></View></View><Text style={[styles.note, { color: colors.muted }]}>取得 {new Date(latestPressureBatch.fetchedAt).toLocaleString("ja-JP")}。地上気圧のモデル系列を、記録の振り返り用に表示しています。</Text></> : <Text style={[styles.note, { color: colors.muted }]}>気圧履歴はまだありません。ホームの「天候を更新」から取得できます。</Text>}</Card><Card style={styles.panelCard}><Text style={[styles.panelTitle, { color: colors.foreground }]}>カフェイン記録</Text>{caffeineRecords.length ? caffeineRecords.slice(-6).reverse().map((record) => <View key={record.id} style={[styles.eventRow, { borderColor: colors.border }]}><Text style={[styles.eventDate, { color: colors.foreground }]}>{formatShortDate(record.date)} {record.caffeineTime || "時刻未入力"}</Text><Text style={[styles.eventMeta, { color: colors.muted }]}>{record.caffeineNote || "メモなし"}</Text></View>) : <Text style={[styles.note, { color: colors.muted }]}>カフェイン記録はありません。</Text>}<Text style={[styles.note, { color: colors.muted, marginTop: 8 }]}>気圧やカフェインと体調の関係は、関連の目安として「関連を見る」で確認できます。</Text></Card></>;
+export function EnvironmentPanel({ pressurePeriod, latestPressureChanges, caffeineRecords, colors }: { pressurePeriod: PressureHistoryPeriodSelection; latestPressureChanges: { change3Hours?: { changeHpa: number }; change24Hours?: { changeHpa: number } }; caffeineRecords: SleepRecord[]; colors: ReturnType<typeof useColors> }) {
+  const latestPressureBatch = pressurePeriod.latestBatch;
+  return <><Card style={styles.panelCard}>{latestPressureBatch ? <><Text style={[styles.panelTitle, { color: colors.foreground }]}>気圧の時系列</Text>{pressurePeriod.pointCount >= 2 ? <PressureHistoryChart batches={pressurePeriod.batches} /> : <Text style={[styles.note, { color: colors.muted }]}>選択期間内の気圧点が1件のため、時系列グラフは表示できません。</Text>}<View style={styles.statsGrid}><View style={styles.statBox}><MetricCard label="3時間変化" value={formatPressureChange(latestPressureChanges.change3Hours)} icon="trending-flat" accent={colors.sleepBlue} /></View><View style={styles.statBox}><MetricCard label="24時間変化" value={formatPressureChange(latestPressureChanges.change24Hours)} icon="trending-flat" accent={colors.sleepBlue} /></View></View><Text style={[styles.note, { color: colors.muted }]}>{pressurePeriod.days}日間の保存済み履歴: {pressurePeriod.batches.length}バッチ・{pressurePeriod.pointCount}点。地点を判別できないバッチ間は線で結びません。</Text><Text style={[styles.note, { color: colors.muted }]}>選択期間内の最新取得 {new Date(latestPressureBatch.fetchedAt).toLocaleString("ja-JP")}。地上気圧のモデル系列を、記録の振り返り用に表示しています。</Text></> : <Text style={[styles.note, { color: colors.muted }]}>選択期間に気圧履歴はありません。ホームの「天候を更新」から取得できます。</Text>}</Card><Card style={styles.panelCard}><Text style={[styles.panelTitle, { color: colors.foreground }]}>カフェイン記録</Text>{caffeineRecords.length ? caffeineRecords.slice(-6).reverse().map((record) => <View key={record.id} style={[styles.eventRow, { borderColor: colors.border }]}><Text style={[styles.eventDate, { color: colors.foreground }]}>{formatShortDate(record.date)} {record.caffeineTime || "時刻未入力"}</Text><Text style={[styles.eventMeta, { color: colors.muted }]}>{record.caffeineNote || "メモなし"}</Text></View>) : <Text style={[styles.note, { color: colors.muted }]}>カフェイン記録はありません。</Text>}<Text style={[styles.note, { color: colors.muted, marginTop: 8 }]}>複数の項目を横断して確認する分析は、高度な分析から開けます。</Text></Card></>;
 }
 
 function TrendBars({ points, formatValue, accent, title }: { points: ReturnType<typeof buildTrend>; formatValue: (value: number) => string; accent: string; title?: string }) {
@@ -152,7 +154,7 @@ function TrendBars({ points, formatValue, accent, title }: { points: ReturnType<
 
 function SleepIntervalList({ records, colors }: { records: SleepRecord[]; colors: ReturnType<typeof useColors> }) {
   if (!records.length) return <Text style={[styles.note, { color: colors.muted }]}>睡眠記録はありません。</Text>;
-  return <View style={styles.eventList}>{records.slice(-7).reverse().map((record) => { const bed = timeToMinutes(record.bedTime); const wake = timeToMinutes(record.wakeTime); return <View key={record.id} style={[styles.eventRow, { borderColor: colors.border }]}><Text style={[styles.eventDate, { color: colors.foreground }]}>{formatShortDate(record.date)}　{record.bedTime} 〜 {record.wakeTime}</Text><Text style={[styles.eventMeta, { color: colors.muted }]}>{bed === null || wake === null ? "時刻データなし" : formatDuration(record.sleepMinutes, true)} · 昼寝 {formatDuration(record.napMinutes, true)}</Text></View>; })}</View>;
+  return <View style={styles.eventList}>{records.slice(-7).reverse().map((record) => { const bed = timeToMinutes(record.bedTime); const wake = timeToMinutes(record.wakeTime); const durationLabel = record.sleepDurationDefinition === "actualSleep" ? "実睡眠" : "旧定義"; return <View key={record.id} style={[styles.eventRow, { borderColor: colors.border }]}><Text style={[styles.eventDate, { color: colors.foreground }]}>{formatShortDate(record.date)}　{record.bedTime} 〜 {record.wakeTime}</Text><Text style={[styles.eventMeta, { color: colors.muted }]}>{bed === null || wake === null ? "時刻データなし" : `${durationLabel} ${formatDuration(record.sleepMinutes, true)}`} · 昼寝 {formatDuration(record.napMinutes, true)}</Text></View>; })}</View>;
 }
 
 function formatPressureChange(change?: { changeHpa: number }) {
@@ -167,7 +169,7 @@ export function RelationCard({ relation }: { relation: ReturnType<typeof analyze
   const content = relation.status === "ready" && relation.coefficient !== null
     ? `相関の目安 ${relation.coefficient >= 0 ? "+" : "−"}${Math.abs(relation.coefficient).toFixed(2)}（${relation.pairedCount} 組）`
     : relation.status === "constant" ? `${relation.pairedCount} 組ありますが、値のばらつきがないため算出できません。` : `データ不足（${relation.pairedCount} / 5 組）。両方の値がある日だけを数えます。`;
-  return <Card style={styles.relationCard}><Text style={[styles.relationTitle, { color: colors.foreground }]}>{relation.label}</Text><Text style={[styles.relationMeta, { color: colors.muted }]}>{relation.xLabel} × {relation.yLabel}</Text><Text style={[styles.relationValue, { color: relation.status === "ready" ? colors.primary : colors.muted }]}>{content}</Text></Card>;
+  return <Card style={styles.relationCard}><Text style={[styles.relationTitle, { color: colors.foreground }]}>{relation.label}</Text><Text style={[styles.relationMeta, { color: colors.muted }]}>{relation.xLabel} × {relation.yLabel}</Text><Text style={[styles.relationValue, { color: relation.status === "ready" ? colors.primary : colors.muted }]}>{content}</Text>{relation.excludedLegacySleepRecords ? <Text style={[styles.relationMeta, { color: colors.muted }]}>旧定義の睡眠時間 {relation.excludedLegacySleepRecords} 件を除外</Text> : null}</Card>;
 }
 
 export function RecommendationValue({ label, value }: { label: string; value: string }) {
@@ -177,32 +179,15 @@ export function RecommendationValue({ label, value }: { label: string; value: st
 
 export function DataQualityCard({ quality }: { quality: AnalysisQuality }) {
   const colors = useColors();
-  const tone = quality.status === "sufficient" ? colors.success : quality.status === "partial" || quality.status === "reference" ? colors.warning : colors.muted;
   return (
     <Card style={styles.qualityCard}>
-      <Collapsible title={`データ品質（${quality.statusLabel}）`}>
-        <View style={styles.qualityContent}>
-          <View style={styles.qualityHeader}><Text style={[styles.qualityPeriod, { color: colors.foreground }]}>{quality.periodLabel}</Text><SmallStatus label={quality.statusLabel} tone={quality.status === "sufficient" ? "success" : quality.status === "partial" || quality.status === "reference" ? "warning" : "muted"} /></View>
-          <Text style={[styles.qualityMessage, { color: tone }]}>{quality.message}</Text>
-          <View style={styles.qualityGrid}>
-            <QualityValue label="全記録" value={`${quality.totalRecords} 件`} />
-            <QualityValue label="個人分析" value={`${quality.personalRecords} 件`} />
-            <QualityValue label={`${quality.metricLabel}有効`} value={`${quality.validMetricRecords} 件`} />
-            <QualityValue label="欠損除外" value={`${quality.missingMetricRecords} 件`} />
-          </View>
-          {quality.excludedSampleRecords ? <Text style={[styles.qualityNote, { color: colors.muted }]}>サンプル記録 {quality.excludedSampleRecords} 件を個人分析から除外しました。</Text> : null}
-          <Text style={[styles.qualityNote, { color: colors.muted }]}>表示グループ: {quality.validPeriodGroups} / {quality.periodGroups}。相関は両方の値がある日だけを使います。</Text>
-          <View style={styles.relationPairs}>{quality.relationPairs.map((relation) => <Text key={relation.key} style={[styles.relationPair, { color: colors.muted }]}>{relation.label}: {relation.pairedCount} / {quality.minimumRelationPairs} 組</Text>)}</View>
-          <Text style={[styles.qualityNote, { color: colors.muted }]}>これは本人の記録を振り返るための参考情報であり、診断ではありません。</Text>
-        </View>
-      </Collapsible>
+      <View style={styles.detailQualityContent}>
+        <View style={styles.qualityHeader}><Text style={[styles.qualityPeriod, { color: colors.foreground }]}>この表示で使った記録</Text><SmallStatus label={quality.statusLabel} tone={quality.status === "sufficient" ? "success" : quality.status === "partial" || quality.status === "reference" ? "warning" : "muted"} /></View>
+        <Text style={[styles.qualityMessage, { color: colors.muted }]}>{quality.metricLabel} {quality.validMetricRecords} 件を表示しています。未記録 {quality.missingMetricRecords} 件は値を補わず、グラフから除外しています。</Text>
+        {quality.excludedLegacySleepRecords ? <Text style={[styles.qualityNote, { color: colors.muted }]}>旧定義の睡眠時間 {quality.excludedLegacySleepRecords} 件は、実睡眠の表示から除外しています。</Text> : null}
+      </View>
     </Card>
   );
-}
-
-function QualityValue({ label, value }: { label: string; value: string }) {
-  const colors = useColors();
-  return <View style={[styles.qualityValue, { backgroundColor: `${colors.primary}12` }]}><Text style={[styles.qualityValueLabel, { color: colors.muted }]}>{label}</Text><Text style={[styles.qualityValueNumber, { color: colors.foreground }]}>{value}</Text></View>;
 }
 
 const styles = StyleSheet.create({
@@ -250,17 +235,11 @@ const styles = StyleSheet.create({
   eventDate: { fontSize: 13, lineHeight: 18, fontWeight: "800" },
   eventMeta: { fontSize: 11, lineHeight: 16 },
   qualityCard: { paddingVertical: 14 },
-  qualityContent: { gap: 10 },
+  detailQualityContent: { gap: 6 },
   qualityHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 8 },
   qualityPeriod: { flex: 1, fontSize: 14, lineHeight: 20, fontWeight: "800" },
   qualityMessage: { fontSize: 13, lineHeight: 19, fontWeight: "700" },
-  qualityGrid: { flexDirection: "row", flexWrap: "wrap", gap: 7 },
-  qualityValue: { width: "48%", borderRadius: 10, padding: 9, gap: 1 },
-  qualityValueLabel: { fontSize: 10, lineHeight: 14, fontWeight: "700" },
-  qualityValueNumber: { fontSize: 14, lineHeight: 20, fontWeight: "900" },
   qualityNote: { fontSize: 11, lineHeight: 16 },
-  relationPairs: { gap: 3 },
-  relationPair: { fontSize: 11, lineHeight: 16 },
   relations: { gap: 8 },
   relationCard: { gap: 3, paddingVertical: 13 },
   relationTitle: { fontSize: 15, lineHeight: 21, fontWeight: "800" },

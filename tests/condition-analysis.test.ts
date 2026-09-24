@@ -6,12 +6,22 @@ import type { SleepRecord } from "../lib/sleep-utils";
 function record(date: string, overrides: Partial<SleepRecord> = {}): SleepRecord {
   return {
     id: date, date, bedTime: "23:30", wakeTime: "07:00", sleepMinutes: 450, latencyMinutes: 20, napMinutes: 0,
-    sleepiness: 3, clarity: 8, caffeine: false, caffeineTime: "", caffeineNote: "", headache: false, headacheIntensity: 0,
+    sleepDurationDefinition: "actualSleep", sleepiness: 3, clarity: 8, caffeine: false, caffeineTime: "", caffeineNote: "", headache: false, headacheIntensity: 0,
     headacheFeatures: [], note: "", createdAt: "2026-09-01T00:00:00.000Z", updatedAt: "2026-09-01T00:00:00.000Z", ...overrides,
   };
 }
 
 describe("condition analysis trends", () => {
+  it("excludes legacy sleep durations from sleep trends and preserves the exclusion count", () => {
+    const records = [
+      record("2026-09-01", { sleepMinutes: 510, sleepDurationDefinition: "legacy" }),
+      record("2026-09-02", { sleepMinutes: 480 }),
+    ];
+
+    const trend = buildTrend(records, "sleepMinutes", "day");
+    expect(trend).toEqual([expect.objectContaining({ key: "2026-09-02", value: 480 })]);
+    expect(summarizeTrend(trend, 1)).toMatchObject({ average: 480, median: 480, dataDays: 1, excludedLegacySleepRecords: 1 });
+  });
   it("excludes sample records from a personal trend", () => {
     const trend = buildTrend([
       record("2026-09-01", { isSample: true, sleepMinutes: 300 }),
@@ -60,6 +70,14 @@ describe("condition analysis trends", () => {
 });
 
 describe("condition analysis relations", () => {
+  it("does not mix legacy sleep durations into sleep correlations", () => {
+    const records = [
+      record("2026-09-01", { sleepMinutes: 300, sleepiness: 10, sleepDurationDefinition: "legacy" }),
+      ...Array.from({ length: 5 }, (_, index) => record(`2026-09-0${index + 2}`, { sleepMinutes: 420 + index * 10, sleepiness: index + 1 })),
+    ];
+
+    expect(analyzeRelation(records, "sleepSleepiness")).toMatchObject({ pairedCount: 5, excludedLegacySleepRecords: 1 });
+  });
   it("does not count sample records as complete relation pairs", () => {
     const personal = Array.from({ length: 4 }, (_, index) => record(`2026-09-0${index + 1}`, { sleepiness: index + 2 }));
     const sample = record("2026-09-05", { isSample: true, sleepiness: 9 });
@@ -92,6 +110,14 @@ describe("condition analysis relations", () => {
 });
 
 describe("sleep reference values", () => {
+  it("does not use legacy values for sleep or reference bed and wake times", () => {
+    const actual = Array.from({ length: MIN_RECOMMENDATION_RECORDS }, (_, index) => record(`2026-09-${String(index + 1).padStart(2, "0")}`, { sleepMinutes: 450, bedTime: "23:30", wakeTime: "07:00" }));
+    const legacy = record("2026-09-08", { sleepMinutes: 900, bedTime: "18:00", wakeTime: "12:00", sleepDurationDefinition: "legacy" });
+
+    expect(buildSleepRecommendation([...actual, legacy])).toMatchObject({
+      status: "ready", targetSleepMinutes: 450, bedTime: "23:30", wakeTime: "07:00", excludedLegacySleepRecords: 1,
+    });
+  });
   it("uses medians from at least seven qualifying personal records", () => {
     const records = Array.from({ length: MIN_RECOMMENDATION_RECORDS }, (_, index) => record(`2026-09-${String(index + 1).padStart(2, "0")}`, { sleepMinutes: 440 + index * 2, bedTime: "23:20", wakeTime: "07:00" }));
     expect(buildSleepRecommendation(records)).toMatchObject({ status: "ready", qualifyingDays: MIN_RECOMMENDATION_RECORDS, targetSleepMinutes: 446, bedTime: "23:20", wakeTime: "07:00" });
@@ -112,6 +138,13 @@ describe("analysis data quality", () => {
     const records = [record("2026-09-01", { isSample: true }), record("2026-09-02")];
     expect(assessAnalysisQuality(records, "sleepMinutes", "day", relationsFor(records))).toMatchObject({
       totalRecords: 2, personalRecords: 1, excludedSampleRecords: 1, validMetricRecords: 1, missingMetricRecords: 0, status: "reference",
+    });
+  });
+
+  it("reports legacy exclusion separately from missing actual-sleep values", () => {
+    const records = [record("2026-09-01", { sleepDurationDefinition: "legacy" }), record("2026-09-02")];
+    expect(assessAnalysisQuality(records, "sleepMinutes", "day", relationsFor(records))).toMatchObject({
+      personalRecords: 2, excludedLegacySleepRecords: 1, validMetricRecords: 1, missingMetricRecords: 0,
     });
   });
 
