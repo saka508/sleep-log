@@ -178,4 +178,23 @@ describe("stored record compatibility", () => {
       weather: { pressureHpa: 998.4, temperatureC: 24.1, condition: "雨", weatherCode: 61, source: "Open-Meteo" },
     });
   });
+
+  it("keeps an unselected headache intensity missing through storage and CSV, while preserving zero", () => {
+    const missing = normalizeSleepRecord({
+      id: "2026-09-10", date: "2026-09-10", bedTime: "23:30", wakeTime: "07:00",
+      sleepMinutes: 450, napMinutes: 0, sleepiness: 4, clarity: 7,
+      caffeine: false, headache: true, note: "", createdAt: "2026-09-10T00:00:00.000Z", updatedAt: "2026-09-10T00:00:00.000Z",
+    });
+    const zero = normalizeSleepRecord({
+      id: "2026-09-11", date: "2026-09-11", bedTime: "23:30", wakeTime: "07:00",
+      sleepMinutes: 450, napMinutes: 0, sleepiness: 4, clarity: 7,
+      caffeine: false, headache: true, headacheIntensity: 0, note: "", createdAt: "2026-09-11T00:00:00.000Z", updatedAt: "2026-09-11T00:00:00.000Z",
+    });
+
+    expect(missing).not.toHaveProperty("headacheIntensity");
+    expect(zero).toMatchObject({ headacheIntensity: 0 });
+    const reloaded = recordsFromCsv(recordsToCsv([missing!, zero!]));
+    expect(reloaded[0]).not.toHaveProperty("headacheIntensity");
+    expect(reloaded[1]).toMatchObject({ headacheIntensity: 0 });
+  });
 });

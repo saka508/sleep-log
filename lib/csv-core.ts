@@ -34,7 +34,7 @@ export function recordsToCsv(records: SleepRecord[]) {
     record.headache,
     record.note,
     record.napMinutes > 0,
-    record.headache ? (record.headacheIntensity ?? 0) : 0,
+    record.headache ? (record.headacheIntensity ?? "") : 0,
     record.headache ? (record.headacheFeatures ?? []).map(getHeadacheFeatureLabel).join("／") : "",
     record.caffeine ? (record.caffeineTime ?? "") : "",
     record.caffeine ? (record.caffeineNote ?? "") : "",
@@ -110,12 +110,13 @@ export function recordsFromCsv(text: string): SleepRecord[] {
     const source = row[columns.weatherSource]?.trim();
     const fatigue = toOptionalScore(row[columns.fatigue]);
     const muscleFatigue = toOptionalScore(row[columns.muscleFatigue]);
+    const headacheIntensity = toOptionalScore(row[columns.headacheIntensity]);
     const weather = pressureHpa !== undefined && temperatureC !== undefined && weatherCode !== undefined && condition && fetchedAt && Number.isFinite(Date.parse(fetchedAt)) && source === "Open-Meteo"
       ? { pressureHpa, temperatureC, condition, weatherCode: Math.round(weatherCode), fetchedAt, source: "Open-Meteo" as const }
       : undefined;
     const latencyMinutes = toOptionalNumber(row[columns.latencyMinutes]);
     const sleepDurationDefinition = row[columns.sleepDurationDefinition]?.trim() === "actualSleep" ? "actualSleep" as const : "legacy" as const;
-    return [{ id: date, date, bedTime, wakeTime, sleepMinutes: Math.max(0, toNumber(row[columns.sleepMinutes] ?? "0")), sleepDurationDefinition, ...(latencyMinutes !== undefined ? { latencyMinutes: Math.max(0, latencyMinutes) } : {}), napMinutes: Math.max(0, toNumber(row[columns.napMinutes] ?? "0")), sleepiness: toScore(row[columns.sleepiness] ?? "0"), ...(fatigue !== undefined ? { fatigue } : {}), clarity: toScore(row[columns.clarity] ?? "0"), caffeine, caffeineTime: caffeine && isTime(row[columns.caffeineTime] ?? "") ? row[columns.caffeineTime].trim() : "", caffeineNote: caffeine ? (row[columns.caffeineNote] ?? "").trim() : "", headache, headacheIntensity: headache ? toScore(row[columns.headacheIntensity] ?? "0") : 0, headacheFeatures: headache ? toHeadacheFeatures(row[columns.headacheFeatures] ?? "") : [], ...(weather ? { weather } : {}), ...(muscleFatigue !== undefined ? { muscleFatigue } : {}), note: row[columns.note] ?? "", isSample: false, createdAt: now, updatedAt: now }];
+    return [{ id: date, date, bedTime, wakeTime, sleepMinutes: Math.max(0, toNumber(row[columns.sleepMinutes] ?? "0")), sleepDurationDefinition, ...(latencyMinutes !== undefined ? { latencyMinutes: Math.max(0, latencyMinutes) } : {}), napMinutes: Math.max(0, toNumber(row[columns.napMinutes] ?? "0")), sleepiness: toScore(row[columns.sleepiness] ?? "0"), ...(fatigue !== undefined ? { fatigue } : {}), clarity: toScore(row[columns.clarity] ?? "0"), caffeine, caffeineTime: caffeine && isTime(row[columns.caffeineTime] ?? "") ? row[columns.caffeineTime].trim() : "", caffeineNote: caffeine ? (row[columns.caffeineNote] ?? "").trim() : "", headache, ...(headache && headacheIntensity !== undefined ? { headacheIntensity } : headache ? {} : { headacheIntensity: 0 }), headacheFeatures: headache ? toHeadacheFeatures(row[columns.headacheFeatures] ?? "") : [], ...(weather ? { weather } : {}), ...(muscleFatigue !== undefined ? { muscleFatigue } : {}), note: row[columns.note] ?? "", isSample: false, createdAt: now, updatedAt: now }];
   });
 }
 

@@ -91,6 +91,7 @@ export function normalizeSleepRecord(value: Partial<SleepRecord>): SleepRecord |
   const fatigue = optionalScore(value.fatigue);
   const muscleFatigue = optionalScore(value.muscleFatigue);
   const headache = Boolean(value.headache);
+  const headacheIntensity = optionalScore(value.headacheIntensity);
   const caffeine = Boolean(value.caffeine);
   const headacheFeatures = Array.isArray(value.headacheFeatures)
     ? [...new Set(value.headacheFeatures.filter((feature): feature is HeadacheFeature => HEADACHE_FEATURE_VALUES.has(feature as HeadacheFeature)))]
@@ -114,7 +115,7 @@ export function normalizeSleepRecord(value: Partial<SleepRecord>): SleepRecord |
     caffeineTime: caffeine && typeof value.caffeineTime === "string" && isTime(value.caffeineTime) ? value.caffeineTime : "",
     caffeineNote: caffeine && typeof value.caffeineNote === "string" ? value.caffeineNote.trim() : "",
     headache,
-    headacheIntensity: headache ? safeScore(value.headacheIntensity) : 0,
+    ...(headache && headacheIntensity !== undefined ? { headacheIntensity } : headache ? {} : { headacheIntensity: 0 }),
     headacheFeatures: headache ? headacheFeatures : [],
     ...(muscleFatigue !== undefined ? { muscleFatigue } : {}),
     ...(weather ? { weather } : {}),
