@@ -158,6 +158,21 @@ export type PressureHistoryPeriodSelection = {
   latestBatch: PressureHistoryBatch | null;
 };
 
+export type PressureHistoryDaySummary = {
+  date: string;
+  batches: PressureHistoryBatch[];
+  pointCount: number;
+  summaryPointCount: number;
+  highestHpa: number | null;
+  lowestHpa: number | null;
+  rangeHpa: number | null;
+  latestObservedAt: string | null;
+  latestFetchedAt: string | null;
+  change3Hours?: PressureChange;
+  change24Hours?: PressureChange;
+  hasSeparatedBatches: boolean;
+};
+
 type PressureHistoryBackupV1 = {
   format: typeof PRESSURE_HISTORY_BACKUP_FORMAT;
   version: 1;
@@ -262,6 +277,75 @@ export function calculatePressureChangesForBatch(batch: PressureHistoryBatch) {
     locationScope: batch.id,
     source: batch.source,
   })));
+}
+
+function localDateKey(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function localDateKeyForTimestamp(timestamp: string) {
+  const date = new Date(timestamp);
+  return Number.isFinite(date.getTime()) ? localDateKey(date) : null;
+}
+
+/**
+ * Builds newest-first local-calendar summaries. Missing dates are kept so the
+ * UI can say "記録なし" instead of silently collapsing the timeline. A stored
+ * batch remains an opaque location boundary, even when two batches share a day.
+ */
+export function buildPressureHistoryDays(
+  input: PressureHistoryBatch[],
+  period: PressureHistoryPeriod,
+  now = new Date(),
+): PressureHistoryDaySummary[] {
+  if (!Number.isFinite(now.getTime())) return [];
+  const days = PRESSURE_HISTORY_PERIOD_DAYS[period];
+  const sourceById = new Map(input.map((batch) => [batch.id, batch]));
+
+  return Array.from({ length: days }, (_, offset) => {
+    // Noon avoids a calendar-day slip when the local timezone crosses a DST boundary.
+    const date = new Date(now.getFullYear(), now.getMonth(), now.getDate() - offset, 12);
+    const dateKey = localDateKey(date);
+    const batches = input.map((batch) => ({
+      ...batch,
+      points: batch.points.filter((point) => localDateKeyForTimestamp(point.observedAt) === dateKey),
+    })).filter((batch) => batch.points.length > 0);
+    const entries = batches.flatMap((batch) => batch.points.map((point) => ({ batch, point })))
+      .sort((a, b) => a.point.observedAt.localeCompare(b.point.observedAt));
+    const latest = entries.at(-1);
+    // Combining extrema across opaque batches could turn a location difference
+    // into a false pressure swing. Use the latest batch for daily statistics.
+    const summaryEntries = latest ? entries.filter(({ batch }) => batch.id === latest.batch.id) : [];
+    const pressures = summaryEntries.map(({ point }) => point.pressureHpa);
+    const highestHpa = pressures.length ? Math.max(...pressures) : null;
+    const lowestHpa = pressures.length ? Math.min(...pressures) : null;
+
+    let changes: PressureChangeSummary = {};
+    if (latest) {
+      const sourceBatch = sourceById.get(latest.batch.id);
+      if (sourceBatch) {
+        changes = calculatePressureChangesForBatch({
+          ...sourceBatch,
+          points: sourceBatch.points.filter((point) => point.observedAt <= latest.point.observedAt),
+        });
+      }
+    }
+
+    return {
+      date: dateKey,
+      batches,
+      pointCount: entries.length,
+      summaryPointCount: summaryEntries.length,
+      highestHpa,
+      lowestHpa,
+      rangeHpa: highestHpa === null || lowestHpa === null ? null : roundHpa(highestHpa - lowestHpa),
+      latestObservedAt: latest?.point.observedAt ?? null,
+      latestFetchedAt: latest ? sourceById.get(latest.batch.id)?.fetchedAt ?? null : null,
+      change3Hours: changes.change3Hours,
+      change24Hours: changes.change24Hours,
+      hasSeparatedBatches: batches.length > 1,
+    };
+  });
 }
 
 /**

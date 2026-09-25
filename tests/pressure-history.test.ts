@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   calculatePressureChanges,
   calculatePressureChangesForBatch,
+  buildPressureHistoryDays,
   createPressureHistoryBatch,
   createPressureHistoryBatchId,
   isPressureHistoryStale,
@@ -199,5 +200,67 @@ describe("pressure history calculations", () => {
 
   it("does not invent a period when no valid retained pressure point exists", () => {
     expect(selectPressureHistoryPeriod([], "month")).toMatchObject({ pointCount: 0, latestBatch: null, startAt: null, endAt: null });
+  });
+
+  it("builds newest-first local calendar days and preserves missing dates", () => {
+    const batch = createPressureHistoryBatch({
+      fetchedAt: "2026-09-20T12:05:00.000Z",
+      latestAvailableAt: "2026-09-20T12:00:00.000Z",
+      points: [
+        point("2026-09-18T12:00:00.000Z", 1008),
+        point("2026-09-20T09:00:00.000Z", 1003),
+        point("2026-09-20T12:00:00.000Z", 1001.5),
+      ],
+    }, "calendar-days");
+
+    const days = buildPressureHistoryDays([batch!], "week", new Date("2026-09-20T15:00:00.000Z"));
+    expect(days).toHaveLength(7);
+    expect(days.map((day) => day.date)).toEqual([
+      "2026-09-20", "2026-09-19", "2026-09-18", "2026-09-17", "2026-09-16", "2026-09-15", "2026-09-14",
+    ]);
+    expect(days[0]).toMatchObject({ pointCount: 2, highestHpa: 1003, lowestHpa: 1001.5, rangeHpa: 1.5 });
+    expect(days[1]).toMatchObject({ pointCount: 0, highestHpa: null, lowestHpa: null, rangeHpa: null });
+    expect(days[2].pointCount).toBe(1);
+  });
+
+  it("keeps same-day batches separate and calculates changes only inside the latest batch", () => {
+    const earlier = createPressureHistoryBatch({
+      fetchedAt: "2026-09-20T09:05:00.000Z",
+      latestAvailableAt: "2026-09-20T09:00:00.000Z",
+      points: [point("2026-09-20T06:00:00.000Z", 1012), point("2026-09-20T09:00:00.000Z", 1011)],
+    }, "opaque-a");
+    const latest = createPressureHistoryBatch({
+      fetchedAt: "2026-09-20T12:05:00.000Z",
+      latestAvailableAt: "2026-09-20T12:00:00.000Z",
+      points: [point("2026-09-20T09:00:00.000Z", 1005), point("2026-09-20T12:00:00.000Z", 1002)],
+    }, "opaque-b");
+
+    const [day] = buildPressureHistoryDays([earlier!, latest!], "day", new Date("2026-09-20T15:00:00.000Z"));
+    expect(day.batches.map((batch) => batch.id)).toEqual(["opaque-a", "opaque-b"]);
+    expect(day.hasSeparatedBatches).toBe(true);
+    expect(day.pointCount).toBe(4);
+    expect(day).toMatchObject({ summaryPointCount: 2, highestHpa: 1005, lowestHpa: 1002, rangeHpa: 3 });
+    expect(day.change3Hours?.changeHpa).toBe(-3);
+  });
+
+  it("can use the preceding calendar day as a 3-hour reference without merging the day cards", () => {
+    const previousDayAt22 = new Date(2026, 8, 19, 22, 0, 0).toISOString();
+    const currentDayAt01 = new Date(2026, 8, 20, 1, 0, 0).toISOString();
+    const batch = createPressureHistoryBatch({
+      fetchedAt: currentDayAt01,
+      latestAvailableAt: currentDayAt01,
+      points: [point(previousDayAt22, 1006), point(currentDayAt01, 1002)],
+    }, "boundary");
+
+    const days = buildPressureHistoryDays([batch!], "week", new Date(2026, 8, 20, 12, 0, 0));
+    expect(days[0]).toMatchObject({ date: "2026-09-20", pointCount: 1 });
+    expect(days[0].change3Hours?.changeHpa).toBe(-4);
+    expect(days[1]).toMatchObject({ date: "2026-09-19", pointCount: 1 });
+    expect(days[0].batches[0].points).toHaveLength(1);
+  });
+
+  it("builds thirty compact month rows even when only some dates contain data", () => {
+    expect(buildPressureHistoryDays([], "month", new Date("2026-09-20T12:00:00.000Z"))).toHaveLength(30);
+    expect(buildPressureHistoryDays([], "day", new Date("invalid"))).toEqual([]);
   });
 });

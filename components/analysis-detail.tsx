@@ -5,19 +5,19 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import {
   ConditionPanel,
   DataQualityCard,
-  EnvironmentPanel,
   HeadachePanel,
   SleepPanel,
   type AnalysisCategory,
   type CategoryTrends,
 } from "@/app/(tabs)/analysis";
+import { EnvironmentPressureHistory } from "@/components/environment-pressure-history";
 import { AppTextInput, Card, PageHeader, PrimaryButton, SegmentedControl, SmallStatus, ToggleRow } from "@/components/sleep-ui";
 import { ScreenContainer } from "@/components/screen-container";
 import { Collapsible } from "@/components/ui/collapsible";
 import { useColors } from "@/hooks/use-colors";
 import { assessAnalysisQuality, buildSleepRecommendation, buildTrend, recordsForActualSleepAnalysis, MIN_RECOMMENDATION_SLEEP_MINUTES, summarizeTrend, type AnalysisGranularity, type AnalysisMetric } from "@/lib/condition-analysis";
 import { useHeadacheEvents } from "@/lib/headache-store";
-import { calculatePressureChangesForBatch, selectPressureHistoryPeriod } from "@/lib/pressure-history";
+import { buildPressureHistoryDays } from "@/lib/pressure-history";
 import { usePressureHistory } from "@/lib/pressure-history-store";
 import { useSleepData } from "@/lib/sleep-store";
 import { formatDuration, isTime } from "@/lib/sleep-utils";
@@ -68,21 +68,16 @@ export default function AnalysisDetailScreen() {
     headache: buildTrend(records, "headacheIntensity", granularity),
     pressure: buildTrend(records, "pressureHpa", granularity),
   }), [records, granularity]);
-  // This uses only retained points; it never fabricates older values and it
-  // keeps opaque fetch batches apart because a batch can represent another location.
-  const pressurePeriod = useMemo(() => selectPressureHistoryPeriod(batches, granularity), [batches, granularity]);
+  // Missing dates remain visible, while opaque fetch batches stay separated
+  // because a stored batch can represent another location.
+  const pressureDays = useMemo(() => buildPressureHistoryDays(batches, granularity), [batches, granularity]);
   const quality = useMemo(() => assessAnalysisQuality(records, metric, granularity, []), [records, metric, granularity]);
-  const latestPressureChanges = useMemo(
-    () => pressurePeriod.latestBatch ? calculatePressureChangesForBatch(pressurePeriod.latestBatch) : {},
-    [pressurePeriod.latestBatch],
-  );
-  const caffeineRecords = useMemo(() => personalRecords.filter((record) => record.caffeine && record.caffeineTime), [personalRecords]);
   const categoryHasData = useMemo(() => {
     if (category === "sleep") return trends.sleep.some((point) => point.value !== null);
     if (category === "condition") return [trends.sleepiness, trends.fatigue, trends.clarity, trends.muscleFatigue].some((points) => points.some((point) => point.value !== null));
     if (category === "headache") return personalRecords.some((record) => record.headache) || events.length > 0;
-    return pressurePeriod.pointCount > 0 || caffeineRecords.length > 0;
-  }, [category, trends, personalRecords, events.length, pressurePeriod.pointCount, caffeineRecords.length]);
+    return true;
+  }, [category, trends, personalRecords, events.length]);
   const recommendation = useMemo(() => buildSleepRecommendation(records), [records]);
   const [bedTimeOverride, setBedTime] = useState<string | null>(null);
   const [wakeTimeOverride, setWakeTime] = useState<string | null>(null);
@@ -131,14 +126,14 @@ export default function AnalysisDetailScreen() {
     <View style={[styles.surface, { backgroundColor: colors.background }]}>
     <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <PageHeader title={CATEGORY_TITLES[category]} subtitle="分析トップから選んだ項目を詳しく表示" action={<PrimaryButton label="分析トップ" secondary onPress={() => router.back()} />} />
-      <Card style={styles.periodCard}><View style={styles.periodHeader}><Text style={[styles.periodTitle, { color: colors.foreground }]}>表示期間</Text><SmallStatus label={category === "environment" ? `${pressurePeriod.days}日` : `${personalRecords.length}日`} tone="muted" /></View><SegmentedControl value={granularity} onChange={setGranularity} options={[{ value: "day", label: "日別" }, { value: "week", label: "週別" }, { value: "month", label: "月別" }]} /></Card>
+      <Card style={styles.periodCard}><View style={styles.periodHeader}><Text style={[styles.periodTitle, { color: colors.foreground }]}>表示期間</Text><SmallStatus label={category === "environment" ? `${pressureDays.length}日` : `${personalRecords.length}日`} tone="muted" /></View><SegmentedControl value={granularity} onChange={setGranularity} options={[{ value: "day", label: "日別" }, { value: "week", label: "週別" }, { value: "month", label: "月別" }]} /></Card>
       {categoryHasData ? <>
         {category === "sleep" ? <SleepPanel trends={trends} records={personalRecords} granularity={granularity} metric={metric} setMetric={setMetric} summary={summarizeTrend(trends.sleep, actualSleep.excludedLegacySleepRecords)} colors={colors} /> : null}
         {category === "condition" ? <ConditionPanel trends={trends} colors={colors} /> : null}
         {category === "headache" ? <HeadachePanel events={events} dailyHeadacheDays={personalRecords.filter((record) => record.headache).length} personalRecords={personalRecords} trends={trends} colors={colors} /> : null}
-        {category === "environment" ? <EnvironmentPanel pressurePeriod={pressurePeriod} latestPressureChanges={latestPressureChanges} caffeineRecords={caffeineRecords} colors={colors} /> : null}
+        {category === "environment" ? <EnvironmentPressureHistory key={granularity} days={pressureDays} period={granularity} /> : null}
       </> : <CategoryEmptyState category={category} colors={colors} />}
-      <DataQualityCard quality={quality} />
+      {category !== "environment" ? <DataQualityCard quality={quality} /> : null}
       {category === "sleep" ? <SleepRecommendation recommendation={recommendation} settings={settings} updateSettings={updateSettings} bedTime={bedTime} wakeTime={wakeTime} sleepMinutes={sleepMinutes} setBedTime={setBedTime} setWakeTime={setWakeTime} setSleepMinutes={setSleepMinutes} toggleRecommendation={toggleRecommendation} saveOverrides={saveOverrides} isSavingRecommendation={isSavingRecommendation} /> : null}
       <View style={[styles.disclaimer, { backgroundColor: `${colors.muted}12` }]}><Text style={[styles.disclaimerText, { color: colors.muted }]}>この分析は個人記録の振り返りであり、診断ではありません。</Text></View>
     </ScrollView>
