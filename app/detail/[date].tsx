@@ -96,7 +96,7 @@ export default function RecordDetailScreen() {
           {record.caffeine && record.caffeineTime ? <DetailRow icon="schedule" label="摂取時刻" value={record.caffeineTime} /> : null}
           {record.caffeine && record.caffeineNote ? <DetailRow icon="notes" label="飲み物・量" value={record.caffeineNote} /> : null}
           <DetailRow icon="healing" label="頭痛" value={record.headache ? "あり" : "なし"} valueColor={record.headache ? colors.error : colors.success} last={!record.headache} />
-          {record.headache ? <DetailRow icon="speed" label="頭痛の強さ" value={`${record.headacheIntensity ?? 0} / 10`} last={!record.headacheFeatures?.length} /> : null}
+          {record.headache ? <DetailRow icon="speed" label="頭痛の強さ" value={record.headacheIntensity === undefined ? "未入力" : `${record.headacheIntensity} / 10`} last={!record.headacheFeatures?.length} /> : null}
           {record.headache && record.headacheFeatures?.length ? <DetailRow icon="fact-check" label="頭痛の特徴" value={record.headacheFeatures.map(getHeadacheFeatureLabel).join("、")} last /> : null}
         </Card>
         {(record.fatigue !== undefined || record.muscleFatigue !== undefined) ? <Text style={[styles.subjectiveCaution, { color: colors.muted }]}>疲労・筋肉疲労は生活の振り返り用の記録であり、医学的な診断ではありません。</Text> : null}

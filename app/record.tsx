@@ -37,7 +37,7 @@ export default function RecordScreen() {
   const [caffeineTime, setCaffeineTime] = useState("");
   const [caffeineNote, setCaffeineNote] = useState("");
   const [headache, setHeadache] = useState<BoolChoice>("no");
-  const [headacheIntensity, setHeadacheIntensity] = useState(0);
+  const [headacheIntensity, setHeadacheIntensity] = useState<number | undefined>();
   const [headacheFeatures, setHeadacheFeatures] = useState<HeadacheFeature[]>([]);
   const [weather, setWeather] = useState<WeatherSnapshot | undefined>();
   const [weatherLoading, setWeatherLoading] = useState(false);
@@ -70,7 +70,7 @@ export default function RecordScreen() {
       setCaffeineTime("");
       setCaffeineNote("");
       setHeadache("no");
-      setHeadacheIntensity(0);
+      setHeadacheIntensity(undefined);
       setHeadacheFeatures([]);
       setWeather(undefined);
       setWeatherMessage("");
@@ -96,7 +96,7 @@ export default function RecordScreen() {
     setCaffeineTime(source.caffeineTime ?? "");
     setCaffeineNote(source.caffeineNote ?? "");
     setHeadache(source.headache ? "yes" : "no");
-    setHeadacheIntensity(source.headacheIntensity ?? 0);
+    setHeadacheIntensity(source.headacheIntensity);
     setHeadacheFeatures(source.headacheFeatures ?? []);
     setWeather(source.weather);
     setWeatherMessage(source.weather ? "保存済みの天候データです。更新すると現在の値に置き換わります。" : "");
@@ -137,6 +137,10 @@ export default function RecordScreen() {
       const next = actualSleepMinutesFromTimes(bedTime, wakeTime, nextLatency);
       setSleepMinutes(next === null ? "" : String(next));
     }
+  };
+  const updateHeadache = (value: BoolChoice) => {
+    if (value === "yes" && headache === "no") setHeadacheIntensity(undefined);
+    setHeadache(value);
   };
 
   const acquireWeather = async () => {
@@ -207,7 +211,9 @@ export default function RecordScreen() {
       caffeineTime: caffeine === "yes" ? caffeineTime.trim() : "",
       caffeineNote: caffeine === "yes" ? caffeineNote.trim() : "",
       headache: headache === "yes",
-      headacheIntensity: headache === "yes" ? headacheIntensity : 0,
+      ...(headache === "yes" && headacheIntensity !== undefined
+        ? { headacheIntensity }
+        : headache === "no" ? { headacheIntensity: 0 } : {}),
       headacheFeatures: headache === "yes" ? headacheFeatures : [],
       ...(weather ? { weather } : {}),
       note: note.trim(),
@@ -374,14 +380,11 @@ export default function RecordScreen() {
             ) : null}
             <View style={styles.formGroup}>
               <FieldLabel label="頭痛" />
-              <ChoicePills value={headache} onChange={setHeadache} options={[{ value: "no", label: "なし", icon: "sentiment-satisfied" }, { value: "yes", label: "あり", icon: "healing" }]} />
+              <ChoicePills value={headache} onChange={updateHeadache} options={[{ value: "no", label: "なし", icon: "sentiment-satisfied" }, { value: "yes", label: "あり", icon: "healing" }]} />
             </View>
             {headache === "yes" ? (
               <View style={[styles.conditionalFields, { backgroundColor: `${colors.error}08`, borderColor: `${colors.error}24` }]}>
-                <View style={styles.formGroup}>
-                  <FieldLabel label="頭痛の強さ" hint={`${headacheIntensity} / 10`} />
-                  <ScorePicker value={headacheIntensity} onChange={setHeadacheIntensity} accent={colors.error} accessibilityLabel="頭痛の強さを選択" />
-                </View>
+                <OptionalScoreInput label="頭痛の強さ" value={headacheIntensity} onChange={setHeadacheIntensity} accent={colors.error} accessibilityLabel="頭痛の強さを選択" low="弱い" high="強い" />
                 <View style={styles.formGroup}>
                   <FieldLabel label="頭痛の特徴" hint="複数選択可" />
                   <MultiChoicePills values={headacheFeatures} onChange={setHeadacheFeatures} options={[...HEADACHE_FEATURE_OPTIONS]} accessibilityLabel="頭痛の特徴" />
