@@ -4,14 +4,12 @@ import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { useRouter } from "expo-router";
 
 import { ConditionTrendChart } from "@/components/condition-trend-chart";
-import { PressureHistoryChart } from "@/components/pressure-history-chart";
 import { Card, ChoicePills, MetricCard, PageHeader, SegmentedControl, SmallStatus } from "@/components/sleep-ui";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { analyzeRelation, buildTrend, formatAnalysisMetric, getAnalysisMetricLabel, recordsForActualSleepAnalysis, summarizeTrend, type AnalysisGranularity, type AnalysisMetric, type AnalysisQuality } from "@/lib/condition-analysis";
 import { Collapsible } from "@/components/ui/collapsible";
 import { useSleepData } from "@/lib/sleep-store";
-import type { PressureHistoryPeriodSelection } from "@/lib/pressure-history";
 import { formatDuration, formatShortDate, getHeadacheFeatureLabel, timeToMinutes, type SleepRecord } from "@/lib/sleep-utils";
 
 const METRIC_OPTIONS: { value: AnalysisMetric; label: string }[] = [
@@ -139,11 +137,6 @@ export function HeadachePanel({ events, dailyHeadacheDays, personalRecords, tren
   return <Card style={styles.panelCard}><Text style={[styles.panelTitle, { color: colors.foreground }]}>頭痛の記録</Text><View style={styles.statsGrid}><View style={styles.statBox}><MetricCard label="日次記録" value={personalRecords.length ? `${dailyHeadacheDays} 日` : "データなし"} icon="event" accent={colors.sleepHeadache} /></View><View style={styles.statBox}><MetricCard label="イベント" value={events.length ? `${events.length} 件` : "データなし"} icon="notifications-none" accent={colors.sleepHeadache} /></View></View><TrendBars points={trends.headache} formatValue={(value) => `${value.toFixed(1)} / 10`} accent={colors.sleepHeadache} title="日次頭痛強度" /><Text style={[styles.note, { color: colors.muted }]}>日次記録と頭痛イベントは別の保存元です。ここでは混在させず、個別に表示します。</Text>{recentEvents.length ? <View style={styles.eventList}>{recentEvents.map((event) => <View key={event.id} style={[styles.eventRow, { borderColor: colors.border }]}><Text style={[styles.eventDate, { color: colors.foreground }]}>{formatShortDate(event.date)} {new Date(event.startedAt).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}</Text><Text style={[styles.eventMeta, { color: colors.muted }]}>{event.severity === null ? "強さ 未入力" : `強さ ${event.severity} / 10`} · {event.symptoms.length ? event.symptoms.map(getHeadacheFeatureLabel).join("・") : "症状未入力"}</Text></View>)}</View> : <Text style={[styles.note, { color: colors.muted }]}>頭痛イベントはまだありません。</Text>}</Card>;
 }
 
-export function EnvironmentPanel({ pressurePeriod, latestPressureChanges, caffeineRecords, colors }: { pressurePeriod: PressureHistoryPeriodSelection; latestPressureChanges: { change3Hours?: { changeHpa: number }; change24Hours?: { changeHpa: number } }; caffeineRecords: SleepRecord[]; colors: ReturnType<typeof useColors> }) {
-  const latestPressureBatch = pressurePeriod.latestBatch;
-  return <><Card style={styles.panelCard}>{latestPressureBatch ? <><Text style={[styles.panelTitle, { color: colors.foreground }]}>気圧の時系列</Text>{pressurePeriod.pointCount >= 2 ? <PressureHistoryChart batches={pressurePeriod.batches} /> : <Text style={[styles.note, { color: colors.muted }]}>選択期間内の気圧点が1件のため、時系列グラフは表示できません。</Text>}<View style={styles.statsGrid}><View style={styles.statBox}><MetricCard label="3時間変化" value={formatPressureChange(latestPressureChanges.change3Hours)} icon="trending-flat" accent={colors.sleepBlue} /></View><View style={styles.statBox}><MetricCard label="24時間変化" value={formatPressureChange(latestPressureChanges.change24Hours)} icon="trending-flat" accent={colors.sleepBlue} /></View></View><Text style={[styles.note, { color: colors.muted }]}>{pressurePeriod.days}日間の保存済み履歴: {pressurePeriod.batches.length}バッチ・{pressurePeriod.pointCount}点。地点を判別できないバッチ間は線で結びません。</Text><Text style={[styles.note, { color: colors.muted }]}>選択期間内の最新取得 {new Date(latestPressureBatch.fetchedAt).toLocaleString("ja-JP")}。地上気圧のモデル系列を、記録の振り返り用に表示しています。</Text></> : <Text style={[styles.note, { color: colors.muted }]}>選択期間に気圧履歴はありません。ホームの「天候を更新」から取得できます。</Text>}</Card><Card style={styles.panelCard}><Text style={[styles.panelTitle, { color: colors.foreground }]}>カフェイン記録</Text>{caffeineRecords.length ? caffeineRecords.slice(-6).reverse().map((record) => <View key={record.id} style={[styles.eventRow, { borderColor: colors.border }]}><Text style={[styles.eventDate, { color: colors.foreground }]}>{formatShortDate(record.date)} {record.caffeineTime || "時刻未入力"}</Text><Text style={[styles.eventMeta, { color: colors.muted }]}>{record.caffeineNote || "メモなし"}</Text></View>) : <Text style={[styles.note, { color: colors.muted }]}>カフェイン記録はありません。</Text>}<Text style={[styles.note, { color: colors.muted, marginTop: 8 }]}>複数の項目を横断して確認する分析は、高度な分析から開けます。</Text></Card></>;
-}
-
 function TrendBars({ points, formatValue, accent, title }: { points: ReturnType<typeof buildTrend>; formatValue: (value: number) => string; accent: string; title?: string }) {
   const colors = useColors();
   const valid = points.filter((point): point is typeof point & { value: number } => point.value !== null);
@@ -155,13 +148,6 @@ function TrendBars({ points, formatValue, accent, title }: { points: ReturnType<
 function SleepIntervalList({ records, colors }: { records: SleepRecord[]; colors: ReturnType<typeof useColors> }) {
   if (!records.length) return <Text style={[styles.note, { color: colors.muted }]}>睡眠記録はありません。</Text>;
   return <View style={styles.eventList}>{records.slice(-7).reverse().map((record) => { const bed = timeToMinutes(record.bedTime); const wake = timeToMinutes(record.wakeTime); const durationLabel = record.sleepDurationDefinition === "actualSleep" ? "実睡眠" : "旧定義"; return <View key={record.id} style={[styles.eventRow, { borderColor: colors.border }]}><Text style={[styles.eventDate, { color: colors.foreground }]}>{formatShortDate(record.date)}　{record.bedTime} 〜 {record.wakeTime}</Text><Text style={[styles.eventMeta, { color: colors.muted }]}>{bed === null || wake === null ? "時刻データなし" : `${durationLabel} ${formatDuration(record.sleepMinutes, true)}`} · 昼寝 {formatDuration(record.napMinutes, true)}</Text></View>; })}</View>;
-}
-
-function formatPressureChange(change?: { changeHpa: number }) {
-  if (!change) return "データ不足";
-  const prefix = change.changeHpa > 0 ? "+" : "";
-  const arrow = change.changeHpa > 0 ? "↑" : change.changeHpa < 0 ? "↓" : "→";
-  return `${prefix}${change.changeHpa.toFixed(1)} ${arrow}`;
 }
 
 export function RelationCard({ relation }: { relation: ReturnType<typeof analyzeRelation> }) {
