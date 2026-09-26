@@ -203,17 +203,18 @@ describe("pressure history calculations", () => {
   });
 
   it("builds newest-first local calendar days and preserves missing dates", () => {
+    const localTime = (day: number, hour: number, minute = 0) => new Date(2026, 8, day, hour, minute, 0).toISOString();
     const batch = createPressureHistoryBatch({
-      fetchedAt: "2026-09-20T12:05:00.000Z",
-      latestAvailableAt: "2026-09-20T12:00:00.000Z",
+      fetchedAt: localTime(20, 12, 5),
+      latestAvailableAt: localTime(20, 12),
       points: [
-        point("2026-09-18T12:00:00.000Z", 1008),
-        point("2026-09-20T09:00:00.000Z", 1003),
-        point("2026-09-20T12:00:00.000Z", 1001.5),
+        point(localTime(18, 12), 1008),
+        point(localTime(20, 9), 1003),
+        point(localTime(20, 12), 1001.5),
       ],
     }, "calendar-days");
 
-    const days = buildPressureHistoryDays([batch!], "week", new Date("2026-09-20T15:00:00.000Z"));
+    const days = buildPressureHistoryDays([batch!], "week", new Date(2026, 8, 20, 15));
     expect(days).toHaveLength(7);
     expect(days.map((day) => day.date)).toEqual([
       "2026-09-20", "2026-09-19", "2026-09-18", "2026-09-17", "2026-09-16", "2026-09-15", "2026-09-14",
@@ -224,18 +225,19 @@ describe("pressure history calculations", () => {
   });
 
   it("keeps same-day batches separate and calculates changes only inside the latest batch", () => {
+    const localTime = (hour: number, minute = 0) => new Date(2026, 8, 20, hour, minute, 0).toISOString();
     const earlier = createPressureHistoryBatch({
-      fetchedAt: "2026-09-20T09:05:00.000Z",
-      latestAvailableAt: "2026-09-20T09:00:00.000Z",
-      points: [point("2026-09-20T06:00:00.000Z", 1012), point("2026-09-20T09:00:00.000Z", 1011)],
+      fetchedAt: localTime(9, 5),
+      latestAvailableAt: localTime(9),
+      points: [point(localTime(6), 1012), point(localTime(9), 1011)],
     }, "opaque-a");
     const latest = createPressureHistoryBatch({
-      fetchedAt: "2026-09-20T12:05:00.000Z",
-      latestAvailableAt: "2026-09-20T12:00:00.000Z",
-      points: [point("2026-09-20T09:00:00.000Z", 1005), point("2026-09-20T12:00:00.000Z", 1002)],
+      fetchedAt: localTime(12, 5),
+      latestAvailableAt: localTime(12),
+      points: [point(localTime(9), 1005), point(localTime(12), 1002)],
     }, "opaque-b");
 
-    const [day] = buildPressureHistoryDays([earlier!, latest!], "day", new Date("2026-09-20T15:00:00.000Z"));
+    const [day] = buildPressureHistoryDays([earlier!, latest!], "day", new Date(2026, 8, 20, 15));
     expect(day.batches.map((batch) => batch.id)).toEqual(["opaque-a", "opaque-b"]);
     expect(day.hasSeparatedBatches).toBe(true);
     expect(day.pointCount).toBe(4);
