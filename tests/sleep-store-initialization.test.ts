@@ -10,6 +10,8 @@ vi.mock("@/lib/condition-model", () => ({
   dailyConditionsFromSleepRecords: () => [],
 }));
 
+// Vitest hoists these mocks before loading the module under test.
+// eslint-disable-next-line import/first
 import { loadInitialSleepData } from "../lib/sleep-store";
 
 describe("loadInitialSleepData", () => {
