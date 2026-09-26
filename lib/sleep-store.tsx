@@ -22,8 +22,13 @@ type SleepDataState = {
   settings: AppSettings;
 };
 
+export type StartupStorageIssue = "read-failed" | "sample-save-failed";
+type SleepDataStorage = { getItem: (key: string) => Promise<string | null>; setItem: (key: string, value: string) => Promise<void> };
+export type InitialSleepDataResult = { state: SleepDataState; startupStorageIssue: StartupStorageIssue | null };
+
 type SleepDataContextValue = SleepDataState & {
   isReady: boolean;
+  startupStorageIssue: StartupStorageIssue | null;
   dailyConditions: DailyConditionRecord[];
   saveRecord: (record: SleepRecord) => Promise<boolean>;
   removeRecord: (date: string) => Promise<boolean>;
@@ -41,35 +46,36 @@ const initialState: SleepDataState = {
   settings: DEFAULT_SETTINGS,
 };
 
+export async function loadInitialSleepData(storage: SleepDataStorage): Promise<InitialSleepDataResult> {
+  let saved: string | null;
+  try { saved = await storage.getItem(STORAGE_KEY); } catch { return { state: initialState, startupStorageIssue: "read-failed" }; }
+  if (saved) {
+    try {
+      const parsed = JSON.parse(saved) as Partial<SleepDataState>;
+      const records = Array.isArray(parsed.records) ? parsed.records.map(normalizeSleepRecord).filter((record): record is SleepRecord => record !== null) : [];
+      return { state: { records: sortRecords(records), settings: { ...DEFAULT_SETTINGS, ...parsed.settings } }, startupStorageIssue: null };
+    } catch { return { state: initialState, startupStorageIssue: "read-failed" }; }
+  }
+  const sampleState: SleepDataState = { records: sortRecords(createSampleRecords()), settings: DEFAULT_SETTINGS };
+  if (!await persistJson(storage, STORAGE_KEY, sampleState)) return { state: initialState, startupStorageIssue: "sample-save-failed" };
+  return { state: sampleState, startupStorageIssue: null };
+}
+
 export function SleepDataProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<SleepDataState>(initialState);
   const [isReady, setIsReady] = useState(false);
+  const [startupStorageIssue, setStartupStorageIssue] = useState<StartupStorageIssue | null>(null);
   const stateRef = useRef(state);
+  const storageReadFailedRef = useRef(false);
 
   useEffect(() => {
     const load = async () => {
       try {
-        const saved = await AsyncStorage.getItem(STORAGE_KEY);
-        if (saved) {
-          const parsed = JSON.parse(saved) as Partial<SleepDataState>;
-          const records = Array.isArray(parsed.records)
-            ? parsed.records.map(normalizeSleepRecord).filter((record): record is SleepRecord => record !== null)
-            : [];
-          const nextState = {
-            records: sortRecords(records),
-            settings: { ...DEFAULT_SETTINGS, ...parsed.settings },
-          };
-          stateRef.current = nextState;
-          setState(nextState);
-        } else {
-          const nextState = { records: sortRecords(createSampleRecords()), settings: DEFAULT_SETTINGS };
-          stateRef.current = nextState;
-          setState(nextState);
-        }
-      } catch {
-        const nextState = { records: sortRecords(createSampleRecords()), settings: DEFAULT_SETTINGS };
-        stateRef.current = nextState;
-        setState(nextState);
+        const result = await loadInitialSleepData(AsyncStorage);
+        storageReadFailedRef.current = result.startupStorageIssue === "read-failed";
+        stateRef.current = result.state;
+        setState(result.state);
+        setStartupStorageIssue(result.startupStorageIssue);
       } finally {
         setIsReady(true);
       }
@@ -77,13 +83,8 @@ export function SleepDataProvider({ children }: { children: React.ReactNode }) {
     void load();
   }, []);
 
-  useEffect(() => {
-    stateRef.current = state;
-    if (!isReady) return;
-    void persistJson(AsyncStorage, STORAGE_KEY, state);
-  }, [isReady, state]);
-
   const saveRecord = useCallback(async (record: SleepRecord) => {
+    if (storageReadFailedRef.current) return false;
     const current = stateRef.current;
     const nextState: SleepDataState = {
       ...current,
@@ -99,6 +100,7 @@ export function SleepDataProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const removeRecord = useCallback((date: string) => {
+    if (storageReadFailedRef.current) return Promise.resolve(false);
     const current = stateRef.current;
     const nextState: SleepDataState = { ...current, records: current.records.filter((record) => record.date !== date) };
     return persistJsonAndCommit(AsyncStorage, STORAGE_KEY, nextState, () => {
@@ -108,6 +110,7 @@ export function SleepDataProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const importRecords = useCallback(async (incoming: SleepRecord[]) => {
+    if (storageReadFailedRef.current) return null;
     const valid = incoming.map(normalizeSleepRecord).filter((record): record is SleepRecord => record !== null);
     const current = stateRef.current;
     const byDate = new Map(current.records.map((record) => [record.date, record]));
@@ -130,6 +133,7 @@ export function SleepDataProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const updateSettings = useCallback((settings: Partial<AppSettings>) => {
+    if (storageReadFailedRef.current) return Promise.resolve(false);
     const current = stateRef.current;
     const nextState: SleepDataState = { ...current, settings: { ...current.settings, ...settings } };
     return persistJsonAndCommit(AsyncStorage, STORAGE_KEY, nextState, () => {
@@ -139,6 +143,7 @@ export function SleepDataProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const removeSampleRecords = useCallback(() => {
+    if (storageReadFailedRef.current) return Promise.resolve(false);
     const current = stateRef.current;
     const nextState: SleepDataState = { ...current, records: current.records.filter((record) => !record.isSample) };
     return persistJsonAndCommit(AsyncStorage, STORAGE_KEY, nextState, () => {
@@ -148,6 +153,7 @@ export function SleepDataProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const addSampleRecords = useCallback(() => {
+    if (storageReadFailedRef.current) return Promise.resolve(false);
     const current = stateRef.current;
     const byDate = new Map(current.records.map((record) => [record.date, record]));
     createSampleRecords().forEach((record) => {
@@ -157,10 +163,12 @@ export function SleepDataProvider({ children }: { children: React.ReactNode }) {
     return persistJsonAndCommit(AsyncStorage, STORAGE_KEY, nextState, () => {
       stateRef.current = nextState;
       setState(nextState);
+      setStartupStorageIssue(null);
     });
   }, []);
 
   const clearAllRecords = useCallback(() => {
+    if (storageReadFailedRef.current) return Promise.resolve(false);
     const current = stateRef.current;
     const nextState: SleepDataState = { ...current, records: [] };
     return persistJsonAndCommit(AsyncStorage, STORAGE_KEY, nextState, () => {
@@ -178,6 +186,7 @@ export function SleepDataProvider({ children }: { children: React.ReactNode }) {
     () => ({
       ...state,
       isReady,
+      startupStorageIssue,
       dailyConditions,
       saveRecord,
       removeRecord,
@@ -187,7 +196,7 @@ export function SleepDataProvider({ children }: { children: React.ReactNode }) {
       addSampleRecords,
       clearAllRecords,
     }),
-    [state, isReady, dailyConditions, saveRecord, removeRecord, importRecords, updateSettings, removeSampleRecords, addSampleRecords, clearAllRecords],
+    [state, isReady, startupStorageIssue, dailyConditions, saveRecord, removeRecord, importRecords, updateSettings, removeSampleRecords, addSampleRecords, clearAllRecords],
   );
 
   return <SleepDataContext.Provider value={value}>{children}</SleepDataContext.Provider>;

@@ -25,7 +25,7 @@ function isReminderTime(value: string) {
 
 export default function SettingsScreen() {
   const colors = useColors();
-  const { records, settings, updateSettings, importRecords, removeSampleRecords, addSampleRecords, clearAllRecords, isReady } = useSleepData();
+  const { records, settings, updateSettings, importRecords, removeSampleRecords, addSampleRecords, clearAllRecords, isReady, startupStorageIssue } = useSleepData();
   const { events: headacheEvents, importEvents: importHeadacheEvents, isReady: headacheEventsReady } = useHeadacheEvents();
   const { batches: pressureBatches, importStore: importPressureHistory, isReady: pressureHistoryReady } = usePressureHistory();
   const { colorScheme, preference, setPreference } = useThemeContext();
@@ -301,8 +301,9 @@ export default function SettingsScreen() {
 
         <SectionLabel title="サンプルデータ" />
         <Card style={styles.formCard}>
+          {startupStorageIssue ? <View style={[styles.storageIssue, { backgroundColor: `${colors.error}14` }]}><MaterialIcons name="error-outline" size={20} color={colors.error} /><View style={styles.timeCopy}><Text style={[styles.timeLabel, { color: colors.error }]}>{startupStorageIssue === "read-failed" ? "保存済みデータを読み込めませんでした" : "サンプルを端末に保存できませんでした"}</Text><Text style={[styles.timeHint, { color: colors.muted }]}>{startupStorageIssue === "read-failed" ? "安全のためサンプルは追加していません。アプリを閉じて端末の保存領域を確認してから、もう一度起動してください。" : "サンプルは保存済みとして扱っていません。端末の保存領域を確認してから、「サンプルを追加」を押して再試行してください。"}</Text></View></View> : null}
           <Text style={[styles.sampleText, { color: colors.muted }]}>グラフの見え方を確認できるサンプルが {records.filter((record) => record.isSample).length} 件あります。自分の記録と区別して表示されます。</Text>
-          {hasSamples ? <PrimaryButton label="サンプルを全削除" icon="delete-outline" secondary disabled={busy} onPress={() => setPendingDeletion("samples")} /> : <PrimaryButton label={busy ? "処理中…" : "サンプルを追加"} icon="add" secondary disabled={busy} onPress={() => { void commitRecordAction(addSampleRecords, "追加しました", "サンプルデータを端末に追加しました。"); }} />}
+          {hasSamples ? <PrimaryButton label="サンプルを全削除" icon="delete-outline" secondary disabled={busy} onPress={() => setPendingDeletion("samples")} /> : <PrimaryButton label={busy ? "処理中…" : startupStorageIssue === "read-failed" ? "再起動後にサンプルを追加" : "サンプルを追加"} icon="add" secondary disabled={busy || startupStorageIssue === "read-failed"} onPress={() => { void commitRecordAction(addSampleRecords, "追加しました", "サンプルデータを端末に追加しました。"); }} />}
         </Card>
 
         <SectionLabel title="危険な操作" />
@@ -331,6 +332,7 @@ const styles = StyleSheet.create({
   themeRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   dataIntro: { flexDirection: "row", alignItems: "center", gap: 11 },
   dataIcon: { width: 41, height: 41, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  storageIssue: { flexDirection: "row", alignItems: "flex-start", gap: 10, padding: 11, borderRadius: 12 },
   sampleText: { fontSize: 13, lineHeight: 20 },
   dangerCard: { gap: 13 },
   backupDivider: { height: StyleSheet.hairlineWidth, marginVertical: 2 },
