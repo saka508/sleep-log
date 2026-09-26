@@ -9,8 +9,8 @@
 完全にローカルで動きます。ネット接続も開発サーバーも不要です。
 
 ```bash
-pnpm install
-pnpm apk        # → build/sleep-log.apk
+corepack pnpm install
+corepack pnpm apk        # → build/sleep-log.apk
 ```
 
 生成された `build/sleep-log.apk` をスマホに転送して開き、「提供元不明のアプリ」を許可してインストールします。転送は USB、Google Drive、`adb install build/sleep-log.apk` のいずれでも構いません。
@@ -20,7 +20,7 @@ pnpm apk        # → build/sleep-log.apk
 - JDK 17 以上
 - Android SDK（`ANDROID_HOME` を設定。未設定なら `~/Android/Sdk` を見ます）
 
-`android/` は gitignore 対象で、無ければ `pnpm apk` が `expo prebuild` で自動生成します。
+`android/` は gitignore 対象で、無ければ `corepack pnpm apk` が `expo prebuild` で自動生成します。
 
 生成される APK は arm64-v8a と armeabi-v7a の両方を含む約 61MB のユニバーサル版で、どの Android 端末でもインストールできます。64bit 端末しか使わないならサイズを半分ほどにできます:
 
@@ -42,19 +42,19 @@ Service Worker が画面と静的アセットをキャッシュするため、�
 ## 開発
 
 ```bash
-pnpm dev        # Metro + API サーバー
-pnpm check      # 型チェック
-pnpm lint
-pnpm test
+corepack pnpm dev        # Metro + API サーバー
+corepack pnpm check      # 型チェック
+corepack pnpm lint
+corepack pnpm test
 ```
 
 Web 版を書き出す場合:
 
 ```bash
-pnpm exec expo export --platform web   # → dist/
+corepack pnpm exec expo export --platform web   # → dist/
 ```
 
-`main` への push で GitHub Actions が型チェック・lint・テストを回してから GitHub Pages にデプロイします。
+`main` 向けの PR では、GitHub Actions が `check`、`lint`、`test`、Web export を実行します。PR から GitHub Pages へはデプロイされません。`main` への push と手動実行では、同じ検証が成功した後に GitHub Pages へデプロイされます。
 
 ## 注意
 
