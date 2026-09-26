@@ -34,8 +34,11 @@ export function EnvironmentPressureHistory({ days, period, markersByDate = {} }:
   if (period === "week") {
     return (
       <View style={styles.list}>
-        <Text style={[styles.listGuide, { color: colors.muted }]}>新しい日から順に7日分を表示しています。日ごとの線は、別バッチをまたいで接続しません。</Text>
-        {days.map((day) => <PressureWeekCard key={day.date} day={day} markers={markersByDate[day.date] ?? []} />)}
+        <Text style={[styles.listGuide, { color: colors.muted }]}>新しい日から順に7日分を表示しています。日をタップすると、詳細を1件だけ展開します。</Text>
+        {days.map((day) => {
+          const expanded = expandedDate === day.date;
+          return <PressureCompactDayCard key={day.date} day={day} expanded={expanded} onToggle={() => setExpandedDate(expanded ? null : day.date)} markers={markersByDate[day.date] ?? []} />;
+        })}
       </View>
     );
   }
@@ -45,7 +48,7 @@ export function EnvironmentPressureHistory({ days, period, markersByDate = {} }:
       <Text style={[styles.listGuide, { color: colors.muted }]}>直近30日を新しい順に表示しています。行をタップすると、その日の詳細を1件だけ展開します。</Text>
       {days.map((day) => {
         const expanded = expandedDate === day.date;
-        return <PressureMonthRow key={day.date} day={day} expanded={expanded} onToggle={() => setExpandedDate(expanded ? null : day.date)} markers={markersByDate[day.date] ?? []} />;
+        return <PressureCompactDayCard key={day.date} day={day} expanded={expanded} onToggle={() => setExpandedDate(expanded ? null : day.date)} markers={markersByDate[day.date] ?? []} />;
       })}
     </View>
   );
@@ -65,48 +68,43 @@ function PressureDayDetail({ day, markers }: { day: PressureHistoryDaySummary; m
   );
 }
 
-function PressureWeekCard({ day, markers }: { day: PressureHistoryDaySummary; markers: PressureHistoryDayMarker[] }) {
+function PressureCompactDayCard({ day, expanded, onToggle, markers }: { day: PressureHistoryDaySummary; expanded: boolean; onToggle: () => void; markers: PressureHistoryDayMarker[] }) {
   const colors = useColors();
   return (
-    <Card style={styles.weekCard}>
-      <DayHeader day={day} />
-      {!day.pointCount ? <EmptyDay compact /> : <>
-        <View style={[styles.chartSurface, { backgroundColor: `${colors.sleepBlue}08` }]}><PressureHistoryChart batches={day.batches} variant="mini" /></View>
-        <PressureStats day={day} />
-        <DayMarkers markers={markers} />
-        <DayEvidence day={day} compact />
-      </>}
-    </Card>
-  );
-}
-
-function PressureMonthRow({ day, expanded, onToggle, markers }: { day: PressureHistoryDaySummary; expanded: boolean; onToggle: () => void; markers: PressureHistoryDayMarker[] }) {
-  const colors = useColors();
-  return (
-    <Card style={styles.monthCard}>
-      <Pressable accessibilityRole="button" accessibilityState={{ expanded }} onPress={onToggle} style={({ pressed }) => [styles.monthPressable, pressed && styles.pressed]}>
-        <View style={styles.monthHeader}>
-          <View style={styles.monthTitleWrap}><Text style={[styles.dayTitle, { color: colors.foreground }]}>{formatDateLabel(day.date)}</Text><Text style={[styles.pointCount, { color: colors.muted }]}>{day.pointCount ? `${day.pointCount}点` : "記録なし"}</Text></View>
-          <MaterialIcons name={expanded ? "expand-less" : "expand-more"} size={23} color={colors.muted} />
+    <Card style={[styles.compactDayCard, expanded && { borderColor: `${colors.sleepBlue}70` }]}>
+      <Pressable accessibilityRole="button" accessibilityState={{ expanded }} accessibilityLabel={`${formatDateLabel(day.date)}の気圧履歴を${expanded ? "閉じる" : "開く"}`} onPress={onToggle} style={({ pressed }) => [styles.compactPressable, pressed && styles.pressed]}>
+        <View style={styles.compactTitleRow}>
+          <View style={styles.compactTitleWrap}>
+            <Text style={[styles.dayTitle, { color: colors.foreground }]}>{formatDateLabel(day.date)}</Text>
+            <Text style={[styles.pointCount, { color: colors.muted }]}>{day.pointCount ? `${day.pointCount}点` : "記録なし"}</Text>
+          </View>
+          <MaterialIcons name={expanded ? "expand-less" : "expand-more"} size={24} color={expanded ? colors.sleepBlue : colors.muted} />
         </View>
-        {day.pointCount ? <>
-          <PressureHistoryChart batches={day.batches} variant="sparkline" />
-          <View style={styles.monthStats}>
+        {day.pointCount ? <View style={styles.compactDataRow}>
+          <View style={[styles.sparklineWrap, { backgroundColor: `${colors.sleepBlue}08` }]}><PressureHistoryChart batches={day.batches} variant="sparkline" /></View>
+          <View style={styles.compactStats}>
             <CompactStat label="最高" value={formatHpa(day.highestHpa)} />
             <CompactStat label="最低" value={formatHpa(day.lowestHpa)} />
             <CompactStat label="変動" value={formatHpa(day.rangeHpa)} />
           </View>
-        </> : null}
+        </View> : null}
       </Pressable>
-      {expanded ? <View style={[styles.expandedArea, { borderTopColor: colors.border }]}>
-        {!day.pointCount ? <EmptyDay compact /> : <>
-          <PressureHistoryChart batches={day.batches} variant="detail" />
-          <PressureStats day={day} includeChanges />
-          <DayMarkers markers={markers} />
-          <DayEvidence day={day} compact />
-        </>}
-      </View> : null}
+      {expanded ? <PressureExpandedDetail day={day} markers={markers} /> : null}
     </Card>
+  );
+}
+
+function PressureExpandedDetail({ day, markers }: { day: PressureHistoryDaySummary; markers: PressureHistoryDayMarker[] }) {
+  const colors = useColors();
+  return (
+    <View style={[styles.expandedArea, { borderTopColor: colors.border }]}>
+      {!day.pointCount ? <EmptyDay compact /> : <>
+        <PressureHistoryChart batches={day.batches} variant="detail" />
+        <PressureStats day={day} includeChanges />
+        <View style={styles.markerSlot}><DayMarkers markers={markers} /></View>
+        <DayEvidence day={day} compact />
+      </>}
+    </View>
   );
 }
 
@@ -176,13 +174,12 @@ const styles = StyleSheet.create({
   list: { gap: 9 },
   listGuide: { fontSize: 12, lineHeight: 18, paddingHorizontal: 2 },
   detailCard: { gap: 12, paddingHorizontal: 13, paddingVertical: 14 },
-  weekCard: { gap: 9, paddingHorizontal: 12, paddingVertical: 12 },
-  monthCard: { paddingHorizontal: 0, paddingVertical: 0, overflow: "hidden" },
-  monthPressable: { paddingHorizontal: 12, paddingVertical: 10, gap: 5 },
+  compactDayCard: { paddingHorizontal: 0, paddingVertical: 0, overflow: "hidden", borderWidth: 1 },
+  compactPressable: { minHeight: 72, paddingHorizontal: 12, paddingVertical: 9, gap: 6 },
   pressed: { opacity: 0.72 },
   dayHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
-  monthHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
-  monthTitleWrap: { flex: 1, flexDirection: "row", alignItems: "baseline", gap: 8, minWidth: 0 },
+  compactTitleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
+  compactTitleWrap: { flex: 1, flexDirection: "row", alignItems: "baseline", gap: 8, minWidth: 0 },
   dayTitle: { fontSize: 17, lineHeight: 23, fontWeight: "900" },
   pointCount: { fontSize: 11, lineHeight: 16, fontWeight: "700" },
   chartSurface: { borderRadius: 11, overflow: "hidden" },
@@ -190,11 +187,14 @@ const styles = StyleSheet.create({
   statTile: { width: "48%", minWidth: 0, borderRadius: 11, borderWidth: 1, paddingHorizontal: 9, paddingVertical: 7, gap: 1 },
   statLabel: { fontSize: 10, lineHeight: 14, fontWeight: "700" },
   statValue: { fontSize: 14, lineHeight: 19, fontWeight: "900" },
-  monthStats: { flexDirection: "row", gap: 7 },
+  compactDataRow: { flexDirection: "row", alignItems: "center", gap: 9 },
+  sparklineWrap: { width: "35%", minWidth: 88, height: 42, borderRadius: 8, overflow: "hidden", justifyContent: "center" },
+  compactStats: { flex: 1, minWidth: 0, flexDirection: "row", gap: 6 },
   compactStat: { flex: 1, minWidth: 0, gap: 1 },
   compactLabel: { fontSize: 9, lineHeight: 12, fontWeight: "700" },
   compactValue: { fontSize: 11, lineHeight: 15, fontWeight: "800" },
   expandedArea: { borderTopWidth: 1, paddingHorizontal: 12, paddingVertical: 12, gap: 10 },
+  markerSlot: { minHeight: 0 },
   evidence: { gap: 3 },
   note: { fontSize: 12, lineHeight: 18 },
   compactNote: { fontSize: 11, lineHeight: 16 },
