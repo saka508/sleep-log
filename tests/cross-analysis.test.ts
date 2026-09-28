@@ -159,6 +159,24 @@ describe("cross analysis condition comparison", () => {
     expect(result.groups.matched.observations[0].outcomeValue).toBe(0);
   });
 
+  it("excludes missing sleepiness and clarity from a condition comparison while keeping zero", () => {
+    const sleepinessResult = analyzeSleepConditionComparison([
+      record("2026-09-01", { sleepMinutes: 360, sleepiness: undefined }),
+      record("2026-09-02", { sleepMinutes: 480, sleepiness: 0 }),
+      record("2026-09-03", { sleepMinutes: 480, sleepiness: 6 }),
+    ], baseQuery);
+    const clarityResult = analyzeSleepConditionComparison([
+      record("2026-09-01", { sleepMinutes: 360, clarity: undefined }),
+      record("2026-09-02", { sleepMinutes: 480, clarity: 0 }),
+      record("2026-09-03", { sleepMinutes: 480, clarity: 6 }),
+    ], { ...baseQuery, outcome: "clarity" });
+
+    expect(sleepinessResult.exclusions.missingOutcome).toBe(1);
+    expect(sleepinessResult.groups.comparison.observations.map((entry) => entry.outcomeValue)).toEqual([0, 6]);
+    expect(clarityResult.exclusions.missingOutcome).toBe(1);
+    expect(clarityResult.groups.comparison.observations.map((entry) => entry.outcomeValue)).toEqual([0, 6]);
+  });
+
   it("reports an absent comparison group", () => {
     const noComparison = analyzeSleepConditionComparison([
       record("2026-09-01", { sleepMinutes: 360 }),

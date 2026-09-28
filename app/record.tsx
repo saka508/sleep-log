@@ -8,11 +8,12 @@ import { ScreenContainer } from "@/components/screen-container";
 import { LocalDatePicker, LocalTimePicker } from "@/components/local-date-time-picker";
 import { useColors } from "@/hooks/use-colors";
 import { useSleepData } from "@/lib/sleep-store";
+import { optionalScoreValueForChoice } from "@/lib/optional-score";
+import { parseNapDuration, type NapInputChoice } from "@/lib/record-form";
 import { actualSleepMinutesFromTimes, formatAcquiredAt, formatDate, formatDuration, HEADACHE_FEATURE_OPTIONS, isDateKey, isTime, timeInBedMinutesFromTimes, todayKey, type HeadacheFeature, type SleepRecord, type WeatherSnapshot } from "@/lib/sleep-utils";
 import { fetchWeatherForCurrentLocation, OPEN_METEO_ATTRIBUTION_URL, WeatherError } from "@/lib/weather-service";
 
 type BoolChoice = "yes" | "no";
-type OptionalScoreChoice = "none" | "record";
 
 export default function RecordScreen() {
   const colors = useColors();
@@ -27,11 +28,11 @@ export default function RecordScreen() {
   const [latencyMinutes, setLatencyMinutes] = useState("");
   const [isSleepMinutesManuallyEdited, setIsSleepMinutesManuallyEdited] = useState(false);
   const [hasConfirmedActualSleepDuration, setHasConfirmedActualSleepDuration] = useState(false);
-  const [napMinutes, setNapMinutes] = useState("0");
-  const [nap, setNap] = useState<BoolChoice>("no");
-  const [sleepiness, setSleepiness] = useState(4);
+  const [napMinutes, setNapMinutes] = useState("");
+  const [nap, setNap] = useState<NapInputChoice>("unknown");
+  const [sleepiness, setSleepiness] = useState<number | undefined>();
   const [fatigue, setFatigue] = useState<number | undefined>();
-  const [clarity, setClarity] = useState(7);
+  const [clarity, setClarity] = useState<number | undefined>();
   const [muscleFatigue, setMuscleFatigue] = useState<number | undefined>();
   const [caffeine, setCaffeine] = useState<BoolChoice>("no");
   const [caffeineTime, setCaffeineTime] = useState("");
@@ -60,11 +61,11 @@ export default function RecordScreen() {
       setLatencyMinutes("");
       setIsSleepMinutesManuallyEdited(false);
       setHasConfirmedActualSleepDuration(false);
-      setNapMinutes("0");
-      setNap("no");
-      setSleepiness(4);
+      setNapMinutes("");
+      setNap("unknown");
+      setSleepiness(undefined);
       setFatigue(undefined);
-      setClarity(7);
+      setClarity(undefined);
       setMuscleFatigue(undefined);
       setCaffeine("no");
       setCaffeineTime("");
@@ -86,8 +87,8 @@ export default function RecordScreen() {
     // definition. Never derive and overwrite them simply by opening a record.
     setIsSleepMinutesManuallyEdited(true);
     setHasConfirmedActualSleepDuration(source.sleepDurationDefinition === "actualSleep");
-    setNapMinutes(String(source.napMinutes));
-    setNap(source.napMinutes > 0 ? "yes" : "no");
+    setNapMinutes(source.napMinutes === undefined ? "" : String(source.napMinutes));
+    setNap(source.napMinutes === undefined ? "unknown" : source.napMinutes > 0 ? "yes" : "no");
     setSleepiness(source.sleepiness);
     setFatigue(source.fatigue);
     setClarity(source.clarity);
@@ -171,7 +172,8 @@ export default function RecordScreen() {
     setSaveFeedback(null);
     const minutes = Number(sleepMinutes);
     const latency = latencyMinutes.trim() === "" ? undefined : Number(latencyMinutes);
-    const napDuration = nap === "yes" ? Number(napMinutes) : 0;
+    const parsedNap = parseNapDuration(nap, napMinutes);
+    const napDuration = parsedNap.value;
     if (!isDateKey(date)) {
       Alert.alert("日付を確認してください", "YYYY-MM-DD の形式で入力してください。");
       return;
@@ -180,7 +182,7 @@ export default function RecordScreen() {
       Alert.alert("時刻を確認してください", "就寝・起床時刻は HH:MM の24時間表記で入力してください。");
       return;
     }
-    if (!Number.isFinite(minutes) || minutes <= 0 || (latency !== undefined && (!Number.isFinite(latency) || latency < 0)) || !Number.isFinite(napDuration) || (nap === "yes" && napDuration <= 0)) {
+    if (!Number.isFinite(minutes) || minutes <= 0 || (latency !== undefined && (!Number.isFinite(latency) || latency < 0)) || !parsedNap.valid) {
       Alert.alert("数値を確認してください", "実際に眠っていた時間は1分以上、寝つきは入力する場合0分以上、昼寝ありの場合は1分以上で入力してください。");
       return;
     }
@@ -202,10 +204,10 @@ export default function RecordScreen() {
       sleepMinutes: Math.round(minutes),
       sleepDurationDefinition: hasConfirmedActualSleepDuration || !existing ? "actualSleep" : "legacy",
       ...(latency !== undefined ? { latencyMinutes: Math.round(latency) } : {}),
-      napMinutes: Math.round(napDuration),
-      sleepiness,
+      ...(napDuration !== undefined ? { napMinutes: Math.round(napDuration) } : {}),
+      ...(sleepiness !== undefined ? { sleepiness } : {}),
       ...(fatigue !== undefined ? { fatigue } : {}),
-      clarity,
+      ...(clarity !== undefined ? { clarity } : {}),
       ...(muscleFatigue !== undefined ? { muscleFatigue } : {}),
       caffeine: caffeine === "yes",
       caffeineTime: caffeine === "yes" ? caffeineTime.trim() : "",
@@ -231,7 +233,8 @@ export default function RecordScreen() {
           return;
         }
         setSaveFeedback({ date, sleepMinutes: next.sleepMinutes });
-      } catch {
+      } catch (error) {
+        console.error("Failed to save sleep record", error);
         Alert.alert("保存に失敗しました", "入力内容はこの画面に残っています。時間をおいてもう一度お試しください。");
       } finally {
         saveLock.current = false;
@@ -302,7 +305,7 @@ export default function RecordScreen() {
             </View>
             <View style={styles.formGroup}>
               <FieldLabel label="昼寝" />
-              <ChoicePills value={nap} onChange={setNap} options={[{ value: "no", label: "なし", icon: "block" }, { value: "yes", label: "あり", icon: "hotel" }]} />
+              <ChoicePills value={nap} onChange={setNap} options={[{ value: "unknown", label: "未入力", icon: "remove" }, { value: "no", label: "なし", icon: "block" }, { value: "yes", label: "あり", icon: "hotel" }]} />
             </View>
             {nap === "yes" ? (
               <View style={[styles.conditionalFields, { backgroundColor: `${colors.primary}09`, borderColor: `${colors.primary}28` }]}>
@@ -351,14 +354,10 @@ export default function RecordScreen() {
           </Card>
           <Card style={styles.formCard}>
             <View style={styles.formGroup}>
-              <FieldLabel label="眠気" hint={`${sleepiness} / 10`} />
-              <ScorePicker value={sleepiness} onChange={setSleepiness} accent="#8B5CF6" accessibilityLabel="眠気を選択" />
-              <View style={styles.scoreLegend}><Text style={[styles.legendText, { color: colors.muted }]}>眠くない</Text><Text style={[styles.legendText, { color: colors.muted }]}>とても眠い</Text></View>
+              <OptionalScoreInput key={`sleepiness-${targetDate}`} label="眠気" value={sleepiness} onChange={setSleepiness} accent="#8B5CF6" accessibilityLabel="眠気を選択" low="眠くない" high="とても眠い" preserveMissingUntilExplicitSelection />
             </View>
             <View style={styles.formGroup}>
-              <FieldLabel label="頭の冴え" hint={`${clarity} / 10`} />
-              <ScorePicker value={clarity} onChange={setClarity} accent="#189B87" accessibilityLabel="頭の冴えを選択" />
-              <View style={styles.scoreLegend}><Text style={[styles.legendText, { color: colors.muted }]}>ぼんやり</Text><Text style={[styles.legendText, { color: colors.muted }]}>よく冴えている</Text></View>
+              <OptionalScoreInput key={`clarity-${targetDate}`} label="頭の冴え" value={clarity} onChange={setClarity} accent="#189B87" accessibilityLabel="頭の冴えを選択" low="ぼんやり" high="よく冴えている" preserveMissingUntilExplicitSelection />
             </View>
             <OptionalScoreInput label="疲労" value={fatigue} onChange={setFatigue} accent="#D97706" low="疲労なし" high="とても疲れている" accessibilityLabel="疲労を選択" />
             <OptionalScoreInput label="筋肉疲労" value={muscleFatigue} onChange={setMuscleFatigue} accent="#DC2626" low="なし" high="とても強い" accessibilityLabel="筋肉疲労を選択" />
@@ -419,13 +418,17 @@ function WeatherValue({ label, value }: { label: string; value: string }) {
   return <View style={styles.weatherValue}><Text style={[styles.weatherValueLabel, { color: colors.muted }]}>{label}</Text><Text style={[styles.weatherValueText, { color: colors.foreground }]}>{value}</Text></View>;
 }
 
-function OptionalScoreInput({ label, value, onChange, accent, low, high, accessibilityLabel }: { label: string; value?: number; onChange: (value: number | undefined) => void; accent: string; low: string; high: string; accessibilityLabel: string }) {
+function OptionalScoreInput({ label, value, onChange, accent, low, high, accessibilityLabel, preserveMissingUntilExplicitSelection = false }: { label: string; value?: number; onChange: (value: number | undefined) => void; accent: string; low: string; high: string; accessibilityLabel: string; preserveMissingUntilExplicitSelection?: boolean }) {
   const colors = useColors();
-  const choice: OptionalScoreChoice = value === undefined ? "none" : "record";
+  const [isPickerOpen, setIsPickerOpen] = useState(value !== undefined);
+  const choice = isPickerOpen ? "record" : "none";
   return <View style={styles.formGroup}>
-    <FieldLabel label={label} hint={value === undefined ? "任意" : `${value} / 10`} />
-    <ChoicePills value={choice} onChange={(next) => onChange(next === "none" ? undefined : value ?? 0)} options={[{ value: "none", label: "未入力", icon: "remove" }, { value: "record", label: "入力する", icon: "edit" }]} />
-    {value !== undefined ? <><ScorePicker value={value} onChange={onChange} accent={accent} accessibilityLabel={accessibilityLabel} /><View style={styles.scoreLegend}><Text style={[styles.legendText, { color: colors.muted }]}>{low}</Text><Text style={[styles.legendText, { color: colors.muted }]}>{high}</Text></View></> : null}
+    <FieldLabel label={label} hint={value === undefined ? "任意・数値を選ぶまで保存しません" : `${value} / 10`} />
+    <ChoicePills value={choice} onChange={(next) => {
+      setIsPickerOpen(next === "record");
+      onChange(preserveMissingUntilExplicitSelection ? optionalScoreValueForChoice(next, value) : next === "none" ? undefined : value ?? 0);
+    }} options={[{ value: "none", label: "未入力", icon: "remove" }, { value: "record", label: "入力する", icon: "edit" }]} />
+    {isPickerOpen ? <><ScorePicker value={value} onChange={onChange} accent={accent} accessibilityLabel={accessibilityLabel} /><View style={styles.scoreLegend}><Text style={[styles.legendText, { color: colors.muted }]}>{low}</Text><Text style={[styles.legendText, { color: colors.muted }]}>{high}</Text></View></> : null}
   </View>;
 }
 

@@ -32,10 +32,13 @@ export type SleepRecord = {
   sleepDurationDefinition?: "legacy" | "actualSleep";
   /** Time from getting into bed until falling asleep; omitted when unknown. */
   latencyMinutes?: number;
-  napMinutes: number;
-  sleepiness: number;
+  /** Omitted when the nap duration was not recorded. Zero means no nap. */
+  napMinutes?: number;
+  /** Omitted when the score was not recorded. Zero is a recorded score. */
+  sleepiness?: number;
   fatigue?: number;
-  clarity: number;
+  /** Omitted when the score was not recorded. Zero is a recorded score. */
+  clarity?: number;
   caffeine: boolean;
   caffeineTime?: string;
   caffeineNote?: string;
@@ -82,12 +85,30 @@ export function getHeadacheFeatureLabel(feature: HeadacheFeature) {
 /** Normalize records loaded from AsyncStorage or CSV without rejecting legacy data. */
 export function normalizeSleepRecord(value: Partial<SleepRecord>): SleepRecord | null {
   if (!value.date || !value.id || !value.bedTime || !value.wakeTime) return null;
-  const safeScore = (score: unknown) => Math.max(0, Math.min(10, Math.round(Number(score) || 0)));
+  const optionalFiniteNumber = (input: unknown) => {
+    if (typeof input === "number") return Number.isFinite(input) ? input : undefined;
+    if (typeof input !== "string" || !input.trim()) return undefined;
+    const parsed = Number(input);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  };
+  const optionalStrictScore = (score: unknown) => {
+    const parsed = optionalFiniteNumber(score);
+    if (parsed === undefined) return undefined;
+    const rounded = Math.round(parsed);
+    return parsed >= 0 && parsed <= 10 && rounded >= 0 && rounded <= 10 ? rounded : undefined;
+  };
   const optionalScore = (score: unknown) => {
     if (score === null || score === undefined || score === "") return undefined;
     const parsed = Number(score);
     return Number.isFinite(parsed) ? Math.max(0, Math.min(10, Math.round(parsed))) : undefined;
   };
+  const optionalMinutes = (minutes: unknown) => {
+    const parsed = optionalFiniteNumber(minutes);
+    return parsed !== undefined && parsed >= 0 && parsed <= 24 * 60 ? Math.round(parsed) : undefined;
+  };
+  const napMinutes = optionalMinutes(value.napMinutes);
+  const sleepiness = optionalStrictScore(value.sleepiness);
+  const clarity = optionalStrictScore(value.clarity);
   const fatigue = optionalScore(value.fatigue);
   const muscleFatigue = optionalScore(value.muscleFatigue);
   const headache = Boolean(value.headache);
@@ -107,10 +128,10 @@ export function normalizeSleepRecord(value: Partial<SleepRecord>): SleepRecord |
     ...(value.latencyMinutes === null || value.latencyMinutes === undefined
       ? {}
       : { latencyMinutes: Math.max(0, Number(value.latencyMinutes) || 0) }),
-    napMinutes: Math.max(0, Number(value.napMinutes) || 0),
-    sleepiness: safeScore(value.sleepiness),
+    ...(napMinutes !== undefined ? { napMinutes } : {}),
+    ...(sleepiness !== undefined ? { sleepiness } : {}),
     ...(fatigue !== undefined ? { fatigue } : {}),
-    clarity: safeScore(value.clarity),
+    ...(clarity !== undefined ? { clarity } : {}),
     caffeine,
     caffeineTime: caffeine && typeof value.caffeineTime === "string" && isTime(value.caffeineTime) ? value.caffeineTime : "",
     caffeineNote: caffeine && typeof value.caffeineNote === "string" ? value.caffeineNote.trim() : "",
@@ -308,11 +329,17 @@ export function sortRecords(records: SleepRecord[]) {
 }
 
 export function getSleepStats(records: SleepRecord[]) {
+  const sleepiness = records
+    .map((record) => record.sleepiness)
+    .filter((value): value is number => value !== undefined && Number.isFinite(value));
+  const clarity = records
+    .map((record) => record.clarity)
+    .filter((value): value is number => value !== undefined && Number.isFinite(value));
   return {
-    averageSleepMinutes: average(records.map((record) => record.sleepMinutes)),
-    averageSleepiness: average(records.map((record) => record.sleepiness)),
-    averageClarity: average(records.map((record) => record.clarity)),
-    napDays: records.filter((record) => record.napMinutes > 0).length,
+    averageSleepMinutes: records.length ? average(records.map((record) => record.sleepMinutes)) : null,
+    averageSleepiness: sleepiness.length ? average(sleepiness) : null,
+    averageClarity: clarity.length ? average(clarity) : null,
+    napDays: records.filter((record) => record.napMinutes !== undefined && record.napMinutes > 0).length,
   };
 }
 

@@ -27,13 +27,13 @@ export function recordsToCsv(records: SleepRecord[]) {
     record.wakeTime,
     record.sleepMinutes,
     record.latencyMinutes ?? "",
-    record.napMinutes,
-    record.sleepiness,
-    record.clarity,
+    record.napMinutes ?? "",
+    record.sleepiness ?? "",
+    record.clarity ?? "",
     record.caffeine,
     record.headache,
     record.note,
-    record.napMinutes > 0,
+    record.napMinutes !== undefined && record.napMinutes > 0,
     record.headache ? (record.headacheIntensity ?? "") : 0,
     record.headache ? (record.headacheFeatures ?? []).map(getHeadacheFeatureLabel).join("／") : "",
     record.caffeine ? (record.caffeineTime ?? "") : "",
@@ -76,7 +76,6 @@ function rowsFromCsv(text: string) {
 }
 
 function toNumber(value: string) { const parsed = Number(value.trim()); return Number.isFinite(parsed) ? parsed : 0; }
-function toScore(value: string) { return Math.max(0, Math.min(10, Math.round(toNumber(value)))); }
 function toBoolean(value: string) { return ["あり", "true", "1", "yes", "はい"].includes(value.trim().toLowerCase()); }
 
 const HEADACHE_FEATURE_BY_CSV_VALUE = new Map<string, HeadacheFeature>(
@@ -116,7 +115,10 @@ export function recordsFromCsv(text: string): SleepRecord[] {
       : undefined;
     const latencyMinutes = toOptionalNumber(row[columns.latencyMinutes]);
     const sleepDurationDefinition = row[columns.sleepDurationDefinition]?.trim() === "actualSleep" ? "actualSleep" as const : "legacy" as const;
-    return [{ id: date, date, bedTime, wakeTime, sleepMinutes: Math.max(0, toNumber(row[columns.sleepMinutes] ?? "0")), sleepDurationDefinition, ...(latencyMinutes !== undefined ? { latencyMinutes: Math.max(0, latencyMinutes) } : {}), napMinutes: Math.max(0, toNumber(row[columns.napMinutes] ?? "0")), sleepiness: toScore(row[columns.sleepiness] ?? "0"), ...(fatigue !== undefined ? { fatigue } : {}), clarity: toScore(row[columns.clarity] ?? "0"), caffeine, caffeineTime: caffeine && isTime(row[columns.caffeineTime] ?? "") ? row[columns.caffeineTime].trim() : "", caffeineNote: caffeine ? (row[columns.caffeineNote] ?? "").trim() : "", headache, ...(headache && headacheIntensity !== undefined ? { headacheIntensity } : headache ? {} : { headacheIntensity: 0 }), headacheFeatures: headache ? toHeadacheFeatures(row[columns.headacheFeatures] ?? "") : [], ...(weather ? { weather } : {}), ...(muscleFatigue !== undefined ? { muscleFatigue } : {}), note: row[columns.note] ?? "", isSample: false, createdAt: now, updatedAt: now }];
+    const napMinutes = toOptionalNumber(row[columns.napMinutes]);
+    const sleepiness = toOptionalStrictScore(row[columns.sleepiness]);
+    const clarity = toOptionalStrictScore(row[columns.clarity]);
+    return [{ id: date, date, bedTime, wakeTime, sleepMinutes: Math.max(0, toNumber(row[columns.sleepMinutes] ?? "0")), sleepDurationDefinition, ...(latencyMinutes !== undefined ? { latencyMinutes: Math.max(0, latencyMinutes) } : {}), ...(napMinutes !== undefined && napMinutes >= 0 ? { napMinutes: Math.round(napMinutes) } : {}), ...(sleepiness !== undefined ? { sleepiness } : {}), ...(fatigue !== undefined ? { fatigue } : {}), ...(clarity !== undefined ? { clarity } : {}), caffeine, caffeineTime: caffeine && isTime(row[columns.caffeineTime] ?? "") ? row[columns.caffeineTime].trim() : "", caffeineNote: caffeine ? (row[columns.caffeineNote] ?? "").trim() : "", headache, ...(headache && headacheIntensity !== undefined ? { headacheIntensity } : headache ? {} : { headacheIntensity: 0 }), headacheFeatures: headache ? toHeadacheFeatures(row[columns.headacheFeatures] ?? "") : [], ...(weather ? { weather } : {}), ...(muscleFatigue !== undefined ? { muscleFatigue } : {}), note: row[columns.note] ?? "", isSample: false, createdAt: now, updatedAt: now }];
   });
 }
 
@@ -129,4 +131,9 @@ function toOptionalNumber(value?: string) {
 function toOptionalScore(value?: string) {
   const parsed = toOptionalNumber(value);
   return parsed === undefined ? undefined : Math.max(0, Math.min(10, Math.round(parsed)));
+}
+
+function toOptionalStrictScore(value?: string) {
+  const parsed = toOptionalNumber(value);
+  return parsed === undefined || parsed < 0 || parsed > 10 ? undefined : Math.round(parsed);
 }
