@@ -67,7 +67,7 @@ export default function RecordDetailScreen() {
         <Card style={styles.listCard}>
           <DetailRow icon="bed" label="布団にいた時間" value={timeInBedMinutes === null ? "時刻を確認してください" : formatDuration(timeInBedMinutes, true)} />
           <DetailRow icon="timer" label="寝つくまで" value={record.latencyMinutes === undefined ? "未記録" : `${record.latencyMinutes} 分`} />
-          <DetailRow icon="hotel" label="昼寝" value={record.napMinutes > 0 ? `${record.napMinutes} 分` : "なし"} last />
+          <DetailRow icon="hotel" label="昼寝" value={record.napMinutes === undefined ? "未入力" : record.napMinutes > 0 ? `${record.napMinutes} 分` : "なし"} last />
         </Card>
 
         {record.weather ? <>
@@ -116,9 +116,9 @@ function DetailRow({ icon, label, value, valueColor, last = false }: { icon: Rea
   return <View style={[styles.detailRow, !last && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border }]}><View style={[styles.detailIcon, { backgroundColor: `${colors.primary}12` }]}><MaterialIcons name={icon} size={19} color={colors.primary} /></View><Text style={[styles.detailLabel, { color: colors.foreground }]}>{label}</Text><Text style={[styles.detailValue, { color: valueColor ?? colors.foreground }]}>{value}</Text></View>;
 }
 
-function ScoreCard({ label, value, accent, low, high }: { label: string; value: number; accent: string; low: string; high: string }) {
+function ScoreCard({ label, value, accent, low, high }: { label: string; value?: number; accent: string; low: string; high: string }) {
   const colors = useColors();
-  return <Card style={styles.scoreCard}><Text style={[styles.scoreLabel, { color: colors.muted }]}>{label}</Text><Text style={[styles.scoreValue, { color: accent }]}>{value}<Text style={[styles.scoreSuffix, { color: colors.muted }]}> / 10</Text></Text><View style={[styles.scoreBar, { backgroundColor: `${accent}18` }]}><View style={[styles.scoreFill, { backgroundColor: accent, width: `${value * 10}%` }]} /></View><View style={styles.scoreRange}><Text style={[styles.scoreRangeText, { color: colors.muted }]}>{low}</Text><Text style={[styles.scoreRangeText, { color: colors.muted }]}>{high}</Text></View></Card>;
+  return <Card style={styles.scoreCard}><Text style={[styles.scoreLabel, { color: colors.muted }]}>{label}</Text>{value === undefined ? <Text style={[styles.scoreMissing, { color: colors.muted }]}>未入力</Text> : <><Text style={[styles.scoreValue, { color: accent }]}>{value}<Text style={[styles.scoreSuffix, { color: colors.muted }]}> / 10</Text></Text><View style={[styles.scoreBar, { backgroundColor: `${accent}18` }]}><View style={[styles.scoreFill, { backgroundColor: accent, width: `${value * 10}%` }]} /></View><View style={styles.scoreRange}><Text style={[styles.scoreRangeText, { color: colors.muted }]}>{low}</Text><Text style={[styles.scoreRangeText, { color: colors.muted }]}>{high}</Text></View></>}</Card>;
 }
 
 const styles = StyleSheet.create({
@@ -140,6 +140,7 @@ const styles = StyleSheet.create({
   scoreCard: { flex: 1, gap: 6, padding: 15 },
   scoreLabel: { fontSize: 13, lineHeight: 18, fontWeight: "800" },
   scoreValue: { fontSize: 28, lineHeight: 34, fontWeight: "900", letterSpacing: -0.5 },
+  scoreMissing: { fontSize: 18, lineHeight: 34, fontWeight: "800" },
   scoreSuffix: { fontSize: 12, fontWeight: "700" },
   scoreBar: { height: 7, borderRadius: 9, overflow: "hidden", marginTop: 2 },
   scoreFill: { height: "100%", borderRadius: 9 },

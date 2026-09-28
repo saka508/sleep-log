@@ -7,10 +7,12 @@ import {
   createSampleRecords,
   daysFromToday,
   formatDuration,
+  getSleepStats,
   normalizeSleepRecord,
   sleepMinutesFromTimes,
   timeToMinutes,
   todayKey,
+  type SleepRecord,
 } from "../lib/sleep-utils";
 
 describe("sleep time calculation", () => {
@@ -130,23 +132,89 @@ describe("CSV import and export", () => {
     expect(csv.split("\n")[0]).toMatch(/疲労（0-10）,筋肉疲労（0-10）,睡眠時間の定義$/);
   });
 
-  it("imports a Phase 1 CSV with all original columns and safe defaults", () => {
+  it("imports a Phase 1 CSV without manufacturing optional scores", () => {
     const legacyCsv = "日付,就寝時刻,起床時刻,実睡眠時間（分）,寝つくまで（分）,昼寝時間（分）,眠気（0-10）,頭の冴え（0-10）,カフェイン,頭痛,メモ\n2026-09-08,23:45,07:10,425,15,0,3,8,なし,なし,旧形式";
 
     expect(recordsFromCsv(legacyCsv)[0]).toMatchObject({
       date: "2026-09-08",
-      caffeineTime: "",
-      caffeineNote: "",
-      headacheIntensity: 0,
-      headacheFeatures: [],
+      caffeineTime: "", caffeineNote: "", headacheIntensity: 0, headacheFeatures: [],
       note: "旧形式",
     });
     expect(recordsFromCsv(legacyCsv)[0]).not.toHaveProperty("fatigue");
     expect(recordsFromCsv(legacyCsv)[0]).not.toHaveProperty("muscleFatigue");
+    expect(recordsFromCsv(legacyCsv)[0]).toMatchObject({ napMinutes: 0, sleepiness: 3, clarity: 8 });
   });
 });
 
 describe("stored record compatibility", () => {
+  it("treats only finite numbers or nonblank numeric strings as optional observations", () => {
+    const base = {
+      id: "2026-09-05", date: "2026-09-05", bedTime: "23:30", wakeTime: "07:00", sleepMinutes: 450,
+      caffeine: false, headache: false, note: "", createdAt: "2026-09-05T00:00:00.000Z", updatedAt: "2026-09-05T00:00:00.000Z",
+    };
+    const structurallyInvalidValues = [undefined, null, "", "   ", false, true, [], {}, Number.NaN];
+
+    structurallyInvalidValues.forEach((invalid) => {
+      const normalized = normalizeSleepRecord({ ...base, napMinutes: invalid, sleepiness: invalid, clarity: invalid } as unknown as Partial<SleepRecord>)!;
+      expect(normalized).not.toHaveProperty("napMinutes");
+      expect(normalized).not.toHaveProperty("sleepiness");
+      expect(normalized).not.toHaveProperty("clarity");
+    });
+    const outOfRangeScore = normalizeSleepRecord({ ...base, napMinutes: -1, sleepiness: 11, clarity: 10.5 })!;
+    expect(outOfRangeScore).not.toHaveProperty("napMinutes");
+    expect(outOfRangeScore).not.toHaveProperty("sleepiness");
+    expect(outOfRangeScore).not.toHaveProperty("clarity");
+    const tooLongNap = normalizeSleepRecord({ ...base, napMinutes: 24 * 60 + 1 })!;
+    expect(tooLongNap).not.toHaveProperty("napMinutes");
+    expect(normalizeSleepRecord({ ...base, napMinutes: "0", sleepiness: "0", clarity: 0 } as unknown as Partial<SleepRecord>)).toMatchObject({ napMinutes: 0, sleepiness: 0, clarity: 0 });
+  });
+
+  it("keeps missing sleepiness, clarity, and nap duration out of the normalized record while preserving explicit zero", () => {
+    const base = {
+      id: "2026-09-06", date: "2026-09-06", bedTime: "23:30", wakeTime: "07:00", sleepMinutes: 450,
+      caffeine: false, headache: false, note: "", createdAt: "2026-09-06T00:00:00.000Z", updatedAt: "2026-09-06T00:00:00.000Z",
+    };
+    const missing = normalizeSleepRecord({ ...base, napMinutes: "", sleepiness: null, clarity: "invalid" } as unknown as Partial<SleepRecord>);
+    const zero = normalizeSleepRecord({ ...base, napMinutes: 0, sleepiness: 0, clarity: 0 });
+
+    expect(missing).not.toHaveProperty("napMinutes");
+    expect(missing).not.toHaveProperty("sleepiness");
+    expect(missing).not.toHaveProperty("clarity");
+    expect(zero).toMatchObject({ napMinutes: 0, sleepiness: 0, clarity: 0 });
+  });
+
+  it("keeps blank or invalid optional values missing while retaining explicit zero", () => {
+    const csv = [
+      "日付,就寝時刻,起床時刻,実睡眠時間（分）,寝つくまで（分）,昼寝時間（分）,眠気（0-10）,頭の冴え（0-10）,カフェイン,頭痛,メモ",
+      "2026-09-08,23:45,07:10,425,,,0,,なし,なし,空欄",
+      "2026-09-09,23:45,07:10,425,,invalid,12,-1,なし,なし,不正値",
+    ].join("\n");
+    const [blank, invalid] = recordsFromCsv(csv);
+
+    expect(blank).toMatchObject({ sleepiness: 0 });
+    expect(blank).not.toHaveProperty("napMinutes");
+    expect(blank).not.toHaveProperty("clarity");
+    expect(invalid).not.toHaveProperty("napMinutes");
+    expect(invalid).not.toHaveProperty("sleepiness");
+    expect(invalid).not.toHaveProperty("clarity");
+  });
+
+  it("does not expose an empty optional metric as an observed zero", () => {
+    const missing = normalizeSleepRecord({
+      id: "2026-09-10", date: "2026-09-10", bedTime: "23:30", wakeTime: "07:00", sleepMinutes: 450,
+      caffeine: false, headache: false, note: "", createdAt: "2026-09-10T00:00:00.000Z", updatedAt: "2026-09-10T00:00:00.000Z",
+    })!;
+    const zero = normalizeSleepRecord({ ...missing, id: "2026-09-11", date: "2026-09-11", napMinutes: 0, sleepiness: 0, clarity: 0 })!;
+
+    expect(getSleepStats([missing])).toMatchObject({ averageSleepiness: null, averageClarity: null, napDays: 0 });
+    expect(getSleepStats([zero])).toMatchObject({ averageSleepiness: 0, averageClarity: 0, napDays: 0 });
+    const [reloadedMissing, reloadedZero] = recordsFromCsv(recordsToCsv([missing, zero]));
+    expect(reloadedMissing).not.toHaveProperty("napMinutes");
+    expect(reloadedMissing).not.toHaveProperty("sleepiness");
+    expect(reloadedMissing).not.toHaveProperty("clarity");
+    expect(reloadedZero).toMatchObject({ napMinutes: 0, sleepiness: 0, clarity: 0 });
+  });
+
   it("normalizes a record saved before the detailed fields existed", () => {
     const normalized = normalizeSleepRecord({
       id: "2026-09-07", date: "2026-09-07", bedTime: "00:10", wakeTime: "07:00",
@@ -197,4 +265,5 @@ describe("stored record compatibility", () => {
     expect(reloaded[0]).not.toHaveProperty("headacheIntensity");
     expect(reloaded[1]).toMatchObject({ headacheIntensity: 0 });
   });
+
 });

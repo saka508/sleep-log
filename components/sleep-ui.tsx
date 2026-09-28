@@ -190,7 +190,7 @@ export function ScorePicker({
   accent = "#5B63D9",
   accessibilityLabel,
 }: {
-  value: number;
+  value?: number;
   onChange: (value: number) => void;
   accent?: string;
   accessibilityLabel: string;
@@ -377,7 +377,11 @@ export function SegmentedControl<T extends string>({
 export function LineChart({ records, metric }: { records: SleepRecord[]; metric: TrendMetric }) {
   const colors = useColors();
   const points = useMemo(
-    () => records.slice().sort((a, b) => a.date.localeCompare(b.date)).map((record) => ({ date: record.date, value: getMetricValue(record, metric) })),
+    () => records
+      .slice()
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .map((record) => ({ date: record.date, value: getMetricValue(record, metric) }))
+      .filter((point): point is { date: string; value: number } => point.value !== undefined),
     [records, metric],
   );
   if (points.length < 2) return null;
@@ -434,7 +438,9 @@ export function ScatterPlot({
   yMetric: TrendMetric;
 }) {
   const colors = useColors();
-  const points = records.map((record) => ({ x: getMetricValue(record, xMetric), y: getMetricValue(record, yMetric) }));
+  const points = records
+    .map((record) => ({ x: getMetricValue(record, xMetric), y: getMetricValue(record, yMetric) }))
+    .filter((point): point is { x: number; y: number } => point.x !== undefined && point.y !== undefined);
   if (points.length < 2) return null;
   const width = 336;
   const height = 218;

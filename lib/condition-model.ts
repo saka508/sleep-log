@@ -107,7 +107,7 @@ export function dailyConditionFromSleepRecord(record: SleepRecord): DailyConditi
       sleepMinutes: record.sleepMinutes,
       sleepDurationDefinition: record.sleepDurationDefinition === "actualSleep" ? "actualSleep" : "legacy",
       latencyMinutes: record.latencyMinutes,
-      napMinutes: record.napMinutes,
+      ...(record.napMinutes !== undefined ? { napMinutes: record.napMinutes } : {}),
     },
     nutrition: {
       source: "manual",
@@ -117,9 +117,9 @@ export function dailyConditionFromSleepRecord(record: SleepRecord): DailyConditi
     },
     subjective: {
       source: "manual",
-      sleepiness: record.sleepiness,
+      ...(record.sleepiness !== undefined ? { sleepiness: record.sleepiness } : {}),
       ...(record.fatigue !== undefined ? { fatigue: record.fatigue } : {}),
-      clarity: record.clarity,
+      ...(record.clarity !== undefined ? { clarity: record.clarity } : {}),
       headache: record.headache,
       headacheIntensity: record.headacheIntensity,
       headacheFeatures: record.headacheFeatures,
