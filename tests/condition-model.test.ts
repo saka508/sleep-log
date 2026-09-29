@@ -89,6 +89,17 @@ describe("daily condition compatibility model", () => {
     expect(dailyConditionFromSleepRecord(sleepRecord()).subjective).not.toHaveProperty("muscleFatigue");
   });
 
+  it("keeps missing sleepiness, clarity, and nap duration absent while preserving explicit zero", () => {
+    const missing = dailyConditionFromSleepRecord(sleepRecord({ napMinutes: undefined, sleepiness: undefined, clarity: undefined }));
+    const zero = dailyConditionFromSleepRecord(sleepRecord({ napMinutes: 0, sleepiness: 0, clarity: 0 }));
+
+    expect(missing.sleep).not.toHaveProperty("napMinutes");
+    expect(missing.subjective).not.toHaveProperty("sleepiness");
+    expect(missing.subjective).not.toHaveProperty("clarity");
+    expect(zero.sleep).toMatchObject({ napMinutes: 0 });
+    expect(zero.subjective).toMatchObject({ sleepiness: 0, clarity: 0 });
+  });
+
   it("maps an optional weather snapshot without coordinates", () => {
     const condition = dailyConditionFromSleepRecord(sleepRecord({
       weather: { pressureHpa: 1001.5, temperatureC: 25.2, condition: "晴れ", weatherCode: 1, fetchedAt: "2026-09-09T04:00:00.000Z", source: "Open-Meteo" },

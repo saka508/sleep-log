@@ -53,7 +53,7 @@ There is no `vitest.config.*` — vitest picks up `tests/*.test.ts` with default
 
 `lib/sleep-store.tsx` (`SleepDataProvider` / `useSleepData`) is the single source of truth. One `useState` object persisted wholesale to `AsyncStorage` under `sleep-log.local-data.v1` on every change.
 
-Records are **keyed by date**: `id === date` (`YYYY-MM-DD`), enforced in `saveRecord` and `importRecords`. One record per day, by construction — saving over an existing date replaces it. Everything read back from storage goes through `normalizeRecord`, which clamps scores to 0–10 and drops entries missing `date`/`id`/`bedTime`/`wakeTime`, so a shape change there is the migration point.
+Records are **keyed by date**: `id === date` (`YYYY-MM-DD`), enforced in `saveRecord` and `importRecords`. One record per day, by construction — saving over an existing date replaces it. Everything read back from storage goes through `normalizeRecord`, which drops entries missing `date`/`id`/`bedTime`/`wakeTime`. For sleepiness, clarity, and nap duration, missing or invalid input stays absent while an explicit `0` remains an observed value; a shape change there is the migration point.
 
 First launch with no stored data seeds `createSampleRecords()` (flagged `isSample`); the 設定 tab can remove or re-add them.
 

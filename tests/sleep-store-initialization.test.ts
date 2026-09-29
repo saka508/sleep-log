@@ -60,4 +60,22 @@ describe("loadInitialSleepData", () => {
     });
     expect(setItem).not.toHaveBeenCalled();
   });
+
+  it("keeps stored missing optional metrics absent while retaining explicit zero", async () => {
+    const result = await loadInitialSleepData({
+      getItem: async () => JSON.stringify({
+        records: [
+          { id: "2026-09-11", date: "2026-09-11", bedTime: "23:30", wakeTime: "07:00", sleepMinutes: 450, caffeine: false, headache: false, note: "", createdAt: "2026-09-11T00:00:00.000Z", updatedAt: "2026-09-11T00:00:00.000Z" },
+          { id: "2026-09-12", date: "2026-09-12", bedTime: "23:30", wakeTime: "07:00", sleepMinutes: 450, napMinutes: 0, sleepiness: 0, clarity: 0, caffeine: false, headache: false, note: "", createdAt: "2026-09-12T00:00:00.000Z", updatedAt: "2026-09-12T00:00:00.000Z" },
+        ],
+      }),
+      setItem: async () => undefined,
+    });
+
+    const [zero, missing] = result.state.records;
+    expect(zero).toMatchObject({ napMinutes: 0, sleepiness: 0, clarity: 0 });
+    expect(missing).not.toHaveProperty("napMinutes");
+    expect(missing).not.toHaveProperty("sleepiness");
+    expect(missing).not.toHaveProperty("clarity");
+  });
 });
