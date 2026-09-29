@@ -324,7 +324,7 @@ export function analyzeRelation(records: SleepRecord[], key: RelationKey): Relat
 
 export function buildSleepRecommendation(records: SleepRecord[]): SleepRecommendation {
   const actualSleep = recordsForActualSleepAnalysis(records);
-  const qualifying = actualSleep.records.filter((record) => record.sleepiness <= 3 && record.clarity >= 7);
+  const qualifying = actualSleep.records.filter((record) => record.sleepiness !== undefined && record.clarity !== undefined && record.sleepiness <= 3 && record.clarity >= 7);
   if (qualifying.length < MIN_RECOMMENDATION_RECORDS) {
     return { status: "insufficient", qualifyingDays: qualifying.length, minimumDays: MIN_RECOMMENDATION_RECORDS, excludedLegacySleepRecords: actualSleep.excludedLegacySleepRecords };
   }

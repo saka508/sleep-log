@@ -33,7 +33,7 @@ Sleep Logは、日本語の個人向け睡眠・生活記録アプリである�
 
 ### 睡眠
 
-現在の`SleepRecord`は、`id`、`date`、`bedTime`、`wakeTime`、`sleepMinutes`、optionalな`latencyMinutes`、`napMinutes`を持つ。就寝〜起床の時刻差は保存せず、`布団にいた時間`として都度導出する。`sleepDurationDefinition: "actualSleep"`を持つ新規・再保存記録では、`sleepMinutes`は入眠までの時間を差し引いた`実際に眠っていた時間`である。`latencyMinutes`が未記録なら実睡眠の自動計算は行わず、未入力と0分を区別する。`sleepMinutes`を手動で修正した場合も、実睡眠の記録値として保存する。
+現在の`SleepRecord`は、`id`、`date`、`bedTime`、`wakeTime`、`sleepMinutes`、optionalな`latencyMinutes`と`napMinutes`を持つ。就寝〜起床の時刻差は保存せず、`布団にいた時間`として都度導出する。`sleepDurationDefinition: "actualSleep"`を持つ新規・再保存記録では、`sleepMinutes`は入眠までの時間を差し引いた`実際に眠っていた時間`である。`latencyMinutes`が未記録なら実睡眠の自動計算は行わず、未入力と0分を区別する。昼寝も未入力と「なし」=0分を区別する。`sleepMinutes`を手動で修正した場合も、実睡眠の記録値として保存する。
 
 `sleepDurationDefinition`がない旧記録と旧CSVの記録は`legacy`として読み込む。既存の`sleepMinutes`は意味を推定できないため、入眠までの時間を後から差し引かず、値を変更しない。旧記録は画面で「睡眠時間（旧記録）」として区別する。`id`は保存時に`date`へ揃えられ、日次記録は1ローカル日付につき1件である。
 
@@ -41,7 +41,7 @@ Sleep Logは、日本語の個人向け睡眠・生活記録アプリである�
 
 ### 主観状態
 
-現在の日次記録は、`sleepiness`、optionalな`fatigue`、`clarity`、optionalな`muscleFatigue`、`note`を持つ。スコアは0〜10へ正規化される。疲労・筋肉疲労では0が実値、未入力はフィールドなしとして区別される。
+現在の日次記録は、optionalな`sleepiness`、`fatigue`、`clarity`、`muscleFatigue`、`note`を持つ。眠気・頭の冴えは0〜10の有効値だけを保存し、0は実値、未入力・空欄・不正値はフィールドなしとして区別する。疲労・筋肉疲労は既存のoptionalなスコア仕様を維持する。
 
 ### 頭痛
 

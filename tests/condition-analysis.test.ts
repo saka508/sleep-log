@@ -53,6 +53,16 @@ describe("condition analysis trends", () => {
     expect(trend.map((point) => point.value)).toEqual([15]);
   });
 
+  it("excludes missing sleepiness, clarity, and nap duration without excluding recorded zero", () => {
+    const records = [
+      record("2026-09-01", { napMinutes: undefined, sleepiness: undefined, clarity: undefined }),
+      record("2026-09-02", { napMinutes: 0, sleepiness: 0, clarity: 0 }),
+    ];
+    expect(buildTrend(records, "napMinutes", "day").map((point) => point.value)).toEqual([null, 0]);
+    expect(buildTrend(records, "sleepiness", "day").map((point) => point.value)).toEqual([null, 0]);
+    expect(buildTrend(records, "clarity", "day").map((point) => point.value)).toEqual([null, 0]);
+  });
+
   it("includes recorded fatigue zero but leaves absent fatigue as missing", () => {
     const records = [
       record("2026-09-01", { fatigue: 0, muscleFatigue: 0 }),
@@ -108,6 +118,15 @@ describe("condition analysis relations", () => {
     expect(analyzeRelation(records, "sleepSleepiness")).toMatchObject({ status: "constant", pairedCount: 5, coefficient: null });
   });
 
+  it("excludes an unknown nap from nap-to-sleep pairs while retaining an explicit zero", () => {
+    const records = [
+      record("2026-09-01", { napMinutes: undefined }),
+      ...Array.from({ length: 5 }, (_, index) => record(`2026-09-0${index + 2}`, { napMinutes: 0, sleepMinutes: 420 + index * 10 })),
+    ];
+
+    expect(analyzeRelation(records, "napSleep")).toMatchObject({ pairedCount: 5, status: "constant" });
+  });
+
   it("uses only consecutive days with pressure data for pressure-change comparisons", () => {
     const weather = (pressureHpa: number) => ({ pressureHpa, temperatureC: 22, condition: "曇り", weatherCode: 3, fetchedAt: "2026-09-01T00:00:00.000Z", source: "Open-Meteo" as const });
     const result = analyzeRelation([
@@ -131,6 +150,15 @@ describe("sleep reference values", () => {
   it("uses medians from at least seven qualifying personal records", () => {
     const records = Array.from({ length: MIN_RECOMMENDATION_RECORDS }, (_, index) => record(`2026-09-${String(index + 1).padStart(2, "0")}`, { sleepMinutes: 440 + index * 2, bedTime: "23:20", wakeTime: "07:00" }));
     expect(buildSleepRecommendation(records)).toMatchObject({ status: "ready", qualifyingDays: MIN_RECOMMENDATION_RECORDS, targetSleepMinutes: 446, bedTime: "23:20", wakeTime: "07:00" });
+  });
+
+  it("does not use days missing sleepiness or clarity as recommendation evidence", () => {
+    const records = Array.from({ length: MIN_RECOMMENDATION_RECORDS }, (_, index) => record(`2026-09-${String(index + 1).padStart(2, "0")}`, {
+      sleepiness: index === 0 ? undefined : 3,
+      clarity: index === 1 ? undefined : 8,
+    }));
+
+    expect(buildSleepRecommendation(records)).toMatchObject({ status: "insufficient", qualifyingDays: 5 });
   });
 
   it("does not use sample data or surface a short historical median", () => {
