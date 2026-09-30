@@ -9,8 +9,8 @@ import { LocalDatePicker, LocalTimePicker } from "@/components/local-date-time-p
 import { useColors } from "@/hooks/use-colors";
 import { useSleepData } from "@/lib/sleep-store";
 import { optionalScoreValueForChoice } from "@/lib/optional-score";
-import { parseNapDuration, type NapInputChoice } from "@/lib/record-form";
-import { actualSleepMinutesFromTimes, formatAcquiredAt, formatDate, formatDuration, HEADACHE_FEATURE_OPTIONS, isDateKey, isTime, timeInBedMinutesFromTimes, todayKey, type HeadacheFeature, type SleepRecord, type WeatherSnapshot } from "@/lib/sleep-utils";
+import { clearRecordValidationError, hasValidActualSleepMinutes, parseNapDuration, validateRecordForm, type NapInputChoice, type RecordValidationError } from "@/lib/record-form";
+import { actualSleepMinutesFromTimes, formatAcquiredAt, formatDate, formatDuration, HEADACHE_FEATURE_OPTIONS, isDateKey, timeInBedMinutesFromTimes, todayKey, type HeadacheFeature, type SleepRecord, type WeatherSnapshot } from "@/lib/sleep-utils";
 import { fetchWeatherForCurrentLocation, OPEN_METEO_ATTRIBUTION_URL, WeatherError } from "@/lib/weather-service";
 
 type BoolChoice = "yes" | "no";
@@ -46,7 +46,13 @@ export default function RecordScreen() {
   const [note, setNote] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [saveFeedback, setSaveFeedback] = useState<{ date: string; sleepMinutes: number } | null>(null);
+  const [validationError, setValidationError] = useState<RecordValidationError | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const saveLock = useRef(false);
+
+  const clearValidationError = (...codes: RecordValidationError["code"][]) => {
+    setValidationError((current) => clearRecordValidationError(current, ...codes));
+  };
 
   useEffect(() => {
     const source = existing;
@@ -114,11 +120,13 @@ export default function RecordScreen() {
       return;
     }
     setSleepMinutes(String(calculatedActualSleepMinutes));
+    setValidationError((current) => current?.code === "sleep-minutes" ? null : current);
     setIsSleepMinutesManuallyEdited(false);
     setHasConfirmedActualSleepDuration(true);
   };
   const updateBed = (value: string) => {
     setBedTime(value);
+    clearValidationError("time", "latency-over-time-in-bed");
     if (!isSleepMinutesManuallyEdited) {
       const next = actualSleepMinutesFromTimes(value, wakeTime, parsedLatencyMinutes);
       setSleepMinutes(next === null ? "" : String(next));
@@ -126,6 +134,7 @@ export default function RecordScreen() {
   };
   const updateWake = (value: string) => {
     setWakeTime(value);
+    clearValidationError("time", "latency-over-time-in-bed");
     if (!isSleepMinutesManuallyEdited) {
       const next = actualSleepMinutesFromTimes(bedTime, value, parsedLatencyMinutes);
       setSleepMinutes(next === null ? "" : String(next));
@@ -133,6 +142,7 @@ export default function RecordScreen() {
   };
   const updateLatency = (value: string) => {
     setLatencyMinutes(value);
+    clearValidationError("latency", "latency-over-time-in-bed");
     if (!isSleepMinutesManuallyEdited) {
       const nextLatency = value.trim() === "" ? undefined : Number(value);
       const next = actualSleepMinutesFromTimes(bedTime, wakeTime, nextLatency);
@@ -170,30 +180,18 @@ export default function RecordScreen() {
   const save = () => {
     if (saveLock.current) return;
     setSaveFeedback(null);
+    setSaveError(null);
     const minutes = Number(sleepMinutes);
     const latency = latencyMinutes.trim() === "" ? undefined : Number(latencyMinutes);
     const parsedNap = parseNapDuration(nap, napMinutes);
     const napDuration = parsedNap.value;
-    if (!isDateKey(date)) {
-      Alert.alert("日付を確認してください", "YYYY-MM-DD の形式で入力してください。");
+    const formError = validateRecordForm({ date, bedTime, wakeTime, sleepMinutes, latencyMinutes, nap, napMinutes, caffeine, caffeineTime, timeInBedMinutes });
+    if (formError) {
+      setValidationError(formError);
+      if (Platform.OS !== "web") Alert.alert(formError.title, formError.message);
       return;
     }
-    if (!isTime(bedTime) || !isTime(wakeTime)) {
-      Alert.alert("時刻を確認してください", "就寝・起床時刻は HH:MM の24時間表記で入力してください。");
-      return;
-    }
-    if (!Number.isFinite(minutes) || minutes <= 0 || (latency !== undefined && (!Number.isFinite(latency) || latency < 0)) || !parsedNap.valid) {
-      Alert.alert("数値を確認してください", "実際に眠っていた時間は1分以上、寝つきは入力する場合0分以上、昼寝ありの場合は1分以上で入力してください。");
-      return;
-    }
-    if (timeInBedMinutes !== null && latency !== undefined && latency > timeInBedMinutes) {
-      Alert.alert("寝つくまでの時間を確認してください", "寝つくまでの時間は、就寝から起床までの時間を超えない値にしてください。");
-      return;
-    }
-    if (caffeine === "yes" && caffeineTime.trim() && !isTime(caffeineTime)) {
-      Alert.alert("摂取時刻を確認してください", "HH:MM の24時間表記で入力するか、空欄にしてください。");
-      return;
-    }
+    setValidationError(null);
     const now = new Date().toISOString();
     const clashing = date !== targetDate ? records.find((record) => record.date === date) : undefined;
     const next: SleepRecord = {
@@ -229,13 +227,17 @@ export default function RecordScreen() {
       try {
         const saved = await saveRecord(next);
         if (!saved) {
-          Alert.alert("保存に失敗しました", "入力内容はこの画面に残っています。時間をおいてもう一度お試しください。");
+          const message = "入力内容はこの画面に残っています。時間をおいてもう一度お試しください。";
+          setSaveError(message);
+          if (Platform.OS !== "web") Alert.alert("保存に失敗しました", message);
           return;
         }
         setSaveFeedback({ date, sleepMinutes: next.sleepMinutes });
       } catch (error) {
         console.error("Failed to save sleep record", error);
-        Alert.alert("保存に失敗しました", "入力内容はこの画面に残っています。時間をおいてもう一度お試しください。");
+        const message = "入力内容はこの画面に残っています。時間をおいてもう一度お試しください。";
+        setSaveError(message);
+        if (Platform.OS !== "web") Alert.alert("保存に失敗しました", message);
       } finally {
         saveLock.current = false;
         setIsSaving(false);
@@ -279,7 +281,7 @@ export default function RecordScreen() {
           <Card style={styles.formCard}>
             <View style={styles.formGroup}>
               <FieldLabel label="日付" hint="睡眠をとった日・過去の日付も選べます" />
-              <LocalDatePicker value={date} onChange={setDate} accessibilityLabel="睡眠記録の日付を選択" />
+              <LocalDatePicker value={date} onChange={(value) => { setDate(value); clearValidationError("date"); }} accessibilityLabel="睡眠記録の日付を選択" />
             </View>
             <View style={styles.twoColumns}>
               <LocalTimePicker label="就寝時刻" value={bedTime} onChange={updateBed} accessibilityLabel="就寝時刻を選択" />
@@ -290,11 +292,12 @@ export default function RecordScreen() {
               <FieldLabel label={isLegacyExistingRecord ? "睡眠時間（旧記録）" : "実際に眠っていた時間"} hint={isLegacyExistingRecord ? "旧記録は自動変換しません。実睡眠として確認する場合は、手動修正または再計算してください。" : calculatedActualSleepMinutes !== null ? `時刻差から寝つき ${formatDuration(parsedLatencyMinutes, true)} を差し引くと ${formatDuration(calculatedActualSleepMinutes, true)}` : "寝つき未記録のため、手動入力または寝つきの入力が必要です"} />
               <View style={styles.actualSleepControl}>
                 <View style={styles.withUnit}>
-                  <AppTextInput style={styles.numberInput} value={sleepMinutes} onChangeText={(value) => { setSleepMinutes(value); setIsSleepMinutesManuallyEdited(true); setHasConfirmedActualSleepDuration(true); }} keyboardType="number-pad" />
+                  <AppTextInput style={styles.numberInput} value={sleepMinutes} onChangeText={(value) => { setSleepMinutes(value); setIsSleepMinutesManuallyEdited(true); setHasConfirmedActualSleepDuration(true); if (hasValidActualSleepMinutes(value)) clearValidationError("sleep-minutes"); }} keyboardType="number-pad" />
                   <Text style={[styles.unit, { color: colors.muted }]}>分</Text>
                 </View>
                 <PrimaryButton label="再計算" secondary onPress={recalculate} />
               </View>
+              <FormErrorNotice error={validationError?.code === "sleep-minutes" ? validationError : null} />
             </View>
             <View style={styles.formGroup}>
               <FieldLabel label="寝つくまで" hint="未記録のままでも保存できます" />
@@ -305,13 +308,13 @@ export default function RecordScreen() {
             </View>
             <View style={styles.formGroup}>
               <FieldLabel label="昼寝" />
-              <ChoicePills value={nap} onChange={setNap} options={[{ value: "unknown", label: "未入力", icon: "remove" }, { value: "no", label: "なし", icon: "block" }, { value: "yes", label: "あり", icon: "hotel" }]} />
+              <ChoicePills value={nap} onChange={(value) => { setNap(value); clearValidationError("nap-minutes"); }} options={[{ value: "unknown", label: "未入力", icon: "remove" }, { value: "no", label: "なし", icon: "block" }, { value: "yes", label: "あり", icon: "hotel" }]} />
             </View>
             {nap === "yes" ? (
               <View style={[styles.conditionalFields, { backgroundColor: `${colors.primary}09`, borderColor: `${colors.primary}28` }]}>
                 <FieldLabel label="昼寝時間" hint="合計時間" />
                 <View style={styles.withUnit}>
-                  <AppTextInput style={styles.numberInput} value={napMinutes} onChangeText={setNapMinutes} keyboardType="number-pad" />
+                  <AppTextInput style={styles.numberInput} value={napMinutes} onChangeText={(value) => { setNapMinutes(value); clearValidationError("nap-minutes"); }} keyboardType="number-pad" />
                   <Text style={[styles.unit, { color: colors.muted }]}>分</Text>
                 </View>
               </View>
@@ -369,7 +372,7 @@ export default function RecordScreen() {
               <View style={[styles.conditionalFields, { backgroundColor: `${colors.warning}09`, borderColor: `${colors.warning}28` }]}>
                 <View style={styles.formGroup}>
                   <FieldLabel label="摂取時刻" hint="任意" />
-                  <AppTextInput accessibilityLabel="カフェインの摂取時刻" value={caffeineTime} onChangeText={setCaffeineTime} placeholder="例：14:30" keyboardType="numbers-and-punctuation" />
+                  <AppTextInput accessibilityLabel="カフェインの摂取時刻" value={caffeineTime} onChangeText={(value) => { setCaffeineTime(value); clearValidationError("caffeine-time"); }} placeholder="例：14:30" keyboardType="numbers-and-punctuation" />
                 </View>
                 <View style={styles.formGroup}>
                   <FieldLabel label="飲み物・量" hint="任意" />
@@ -406,6 +409,9 @@ export default function RecordScreen() {
               { label: "続けて入力", icon: "edit", secondary: true, onPress: () => setSaveFeedback(null) },
             ]}
           /> : null}
+          {validationError?.code !== "sleep-minutes" ? <FormErrorNotice error={validationError} /> : null}
+          {validationError?.code === "sleep-minutes" ? <FormErrorNotice error={validationError} compact /> : null}
+          {saveError ? <SaveErrorNotice message={saveError} /> : null}
           <PrimaryButton label={isSaving ? "保存中…" : "この内容で保存"} icon="check" loading={isSaving} onPress={save} />
         </ScrollView>
       </KeyboardAvoidingView>
@@ -416,6 +422,33 @@ export default function RecordScreen() {
 function WeatherValue({ label, value }: { label: string; value: string }) {
   const colors = useColors();
   return <View style={styles.weatherValue}><Text style={[styles.weatherValueLabel, { color: colors.muted }]}>{label}</Text><Text style={[styles.weatherValueText, { color: colors.foreground }]}>{value}</Text></View>;
+}
+
+function FormErrorNotice({ error, compact = false }: { error: RecordValidationError | null; compact?: boolean }) {
+  const colors = useColors();
+  if (!error) return null;
+  return (
+    <View accessibilityRole="alert" style={[styles.formNotice, compact && styles.compactFormNotice, { backgroundColor: `${colors.error}0D`, borderColor: `${colors.error}52` }]}>
+      <MaterialIcons name="error-outline" size={18} color={colors.error} />
+      <View style={styles.formNoticeCopy}>
+        {!compact ? <Text style={[styles.formNoticeTitle, { color: colors.foreground }]}>入力を確認してください</Text> : null}
+        <Text accessibilityLiveRegion="polite" style={[styles.formNoticeText, { color: colors.foreground }]}>{error.message}</Text>
+      </View>
+    </View>
+  );
+}
+
+function SaveErrorNotice({ message }: { message: string }) {
+  const colors = useColors();
+  return (
+    <View accessibilityRole="alert" style={[styles.formNotice, { backgroundColor: `${colors.error}0D`, borderColor: `${colors.error}52` }]}>
+      <MaterialIcons name="error-outline" size={18} color={colors.error} />
+      <View style={styles.formNoticeCopy}>
+        <Text style={[styles.formNoticeTitle, { color: colors.foreground }]}>保存に失敗しました</Text>
+        <Text accessibilityLiveRegion="polite" style={[styles.formNoticeText, { color: colors.foreground }]}>{message}</Text>
+      </View>
+    </View>
+  );
 }
 
 function OptionalScoreInput({ label, value, onChange, accent, low, high, accessibilityLabel, preserveMissingUntilExplicitSelection = false }: { label: string; value?: number; onChange: (value: number | undefined) => void; accent: string; low: string; high: string; accessibilityLabel: string; preserveMissingUntilExplicitSelection?: boolean }) {
@@ -448,6 +481,11 @@ const styles = StyleSheet.create({
   twoColumns: { flexDirection: "row", gap: 12 },
   withUnit: { flexDirection: "row", alignItems: "center", gap: 7 },
   actualSleepControl: { gap: 8 },
+  formNotice: { flexDirection: "row", alignItems: "flex-start", gap: 9, borderWidth: 1, borderRadius: 12, padding: 12, marginTop: 10 },
+  compactFormNotice: { marginTop: 0, paddingVertical: 9 },
+  formNoticeCopy: { flex: 1, gap: 2 },
+  formNoticeTitle: { fontSize: 14, lineHeight: 20, fontWeight: "800" },
+  formNoticeText: { fontSize: 13, lineHeight: 19 },
   numberInput: { flex: 1 },
   unit: { fontSize: 14, lineHeight: 20, fontWeight: "700" },
   scoreLegend: { flexDirection: "row", justifyContent: "space-between", marginTop: 7 },
