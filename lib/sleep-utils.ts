@@ -298,6 +298,11 @@ export function correlation(points: { x: number; y: number }[]) {
 
 export function getMetricValue(record: SleepRecord, metric: TrendMetric) {
   switch (metric) {
+    case "sleepMinutes":
+      // Generic chart helpers are also used by analysis screens. Keep the
+      // provenance guard here so a future caller cannot mix legacy duration
+      // values into an actual-sleep visualization by accident.
+      return record.sleepDurationDefinition === "actualSleep" ? record.sleepMinutes : undefined;
     case "bedTime":
       return clockValueForChart(record.bedTime, true);
     case "wakeTime":
@@ -329,17 +334,19 @@ export function sortRecords(records: SleepRecord[]) {
 }
 
 export function getSleepStats(records: SleepRecord[]) {
-  const sleepiness = records
+  const personalRecords = records.filter((record) => !record.isSample);
+  const actualSleepRecords = personalRecords.filter((record) => record.sleepDurationDefinition === "actualSleep");
+  const sleepiness = personalRecords
     .map((record) => record.sleepiness)
     .filter((value): value is number => value !== undefined && Number.isFinite(value));
-  const clarity = records
+  const clarity = personalRecords
     .map((record) => record.clarity)
     .filter((value): value is number => value !== undefined && Number.isFinite(value));
   return {
-    averageSleepMinutes: records.length ? average(records.map((record) => record.sleepMinutes)) : null,
+    averageSleepMinutes: actualSleepRecords.length ? average(actualSleepRecords.map((record) => record.sleepMinutes)) : null,
     averageSleepiness: sleepiness.length ? average(sleepiness) : null,
     averageClarity: clarity.length ? average(clarity) : null,
-    napDays: records.filter((record) => record.napMinutes !== undefined && record.napMinutes > 0).length,
+    napDays: personalRecords.filter((record) => record.napMinutes !== undefined && record.napMinutes > 0).length,
   };
 }
 

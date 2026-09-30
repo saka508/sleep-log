@@ -7,6 +7,7 @@ import {
   createSampleRecords,
   daysFromToday,
   formatDuration,
+  getMetricValue,
   getSleepStats,
   normalizeSleepRecord,
   sleepMinutesFromTimes,
@@ -44,6 +45,20 @@ describe("analysis data helpers", () => {
     expect(correlation([{ x: 1, y: 1 }, { x: 2, y: 2 }, { x: 3, y: 3 }])).toBeCloseTo(1);
     expect(correlation([{ x: 1, y: 3 }, { x: 2, y: 2 }, { x: 3, y: 1 }])).toBeCloseTo(-1);
     expect(correlation([{ x: 1, y: 1 }, { x: 2, y: 2 }])).toBeNull();
+  });
+
+  it("keeps legacy duration values out of generic actual-sleep helpers", () => {
+    const base = {
+      id: "2026-09-01", date: "2026-09-01", bedTime: "23:30", wakeTime: "07:00", sleepMinutes: 450,
+      caffeine: false, headache: false, note: "", createdAt: "2026-09-01T00:00:00.000Z", updatedAt: "2026-09-01T00:00:00.000Z",
+    };
+    const legacy: SleepRecord = { ...base, sleepMinutes: 900, sleepDurationDefinition: "legacy" };
+    const actual: SleepRecord = { ...base, id: "2026-09-02", date: "2026-09-02", sleepMinutes: 420, sleepDurationDefinition: "actualSleep" };
+    const sample: SleepRecord = { ...base, id: "2026-09-03", date: "2026-09-03", sleepMinutes: 300, sleepDurationDefinition: "actualSleep", isSample: true };
+
+    expect(getMetricValue(legacy, "sleepMinutes")).toBeUndefined();
+    expect(getMetricValue(actual, "sleepMinutes")).toBe(420);
+    expect(getSleepStats([legacy, actual, sample]).averageSleepMinutes).toBe(420);
   });
 
   it("creates a descending date-safe sample set", () => {
