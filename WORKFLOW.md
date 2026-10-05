@@ -119,6 +119,24 @@ The current path requires one human action to start the New Codex Cloud task. Af
 
 The legacy GitHub `@codex` invocation is optional and is not the required implementation path. If its repository-environment attachment fails, do not retry it and do not mark the workflow `BLOCKED` when New Codex Cloud plus the connected GitHub connector can still retrieve and update the PR. Use `BLOCKED` with a handoff-specific reason only when no documented path can retrieve the handoff or update the same PR branch.
 
+### CI and Pages reconciliation
+
+PR/head and merge events commonly arrive before their GitHub Actions or Pages results. When supported workflow/check/deployment completion events are unavailable to Work, configure the hourly task in [`docs/WORK_EVENT_TASK_PROMPT.md`](docs/WORK_EVENT_TASK_PROMPT.md). It is a narrow observer, not a second development supervisor.
+
+Every wait persists a durable queue item:
+
+`<!-- work-reconcile:pr=<number>;target=<pr-ci|main-ci|pages>;sha=<full-sha>;state=pending -->`
+
+The reconciler processes only the latest `pending` PR/target/SHA tuple whose latest Work state remains `WAITING_CI`. Before posting a result, it searches for the exact tuple and result marker; an existing marker makes the run a no-op. It may post at most one result marker and one corresponding Work status transition.
+
+| Pending target | Pending result                              | Success result                                                       | Failure, cancelled, unavailable, or stale result                                    |
+| -------------- | ------------------------------------------- | -------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `pr-ci`        | Remain `WAITING_CI` without another comment | Re-review the current head and choose the appropriate existing state | `BLOCKED`; a stale head is recorded once and the new-head event owns the next cycle |
+| `main-ci`      | Remain `WAITING_CI` without another comment | Create one `pages` pending tuple for the same merged `main` SHA      | `BLOCKED`                                                                           |
+| `pages`        | Remain `WAITING_CI` without another comment | `DEPLOY_CONFIRMED`                                                   | `BLOCKED`                                                                           |
+
+`success`, `failure`, and `stale` are terminal for that tuple. A PR whose latest Work state is no longer `WAITING_CI` is not eligible. Reconciliation must not duplicate status comments or repair handoffs, push changes, merge, or create a next task. Only the normal review path may create a later deterministic `work-to-codex` handoff, and only `DEPLOY_CONFIRMED` may unlock task selection.
+
 Codex may autonomously inspect, implement, test, repair, improve documentation that reflects already-approved behavior, and update PR evidence within the approved Issue scope. It must request human confirmation before changing the roadmap's purpose/order, accepted decisions, persistent data contracts, migrations, CSV meaning/order, deletion semantics, external AI or data transmission, Health/permission behavior, release publication, or a materially new visual direction. Human confirmation is also required when an ambiguity changes user-visible meaning, privacy, cost, safety, or the scope of an Issue.
 
 ## Required verification and phase completion

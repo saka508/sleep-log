@@ -113,6 +113,24 @@ If the legacy GitHub `@codex` invocation cannot attach to the repository environ
 
 After Codex produces a new head SHA, the next Work trigger starts a new review cycle. Work must re-check the new diff and checks instead of assuming the requested repair was implemented correctly.
 
+## CI and Pages reconciliation review
+
+When Work cannot subscribe to workflow/check/deployment completion events, use the hourly reconciliation task defined in `docs/WORK_EVENT_TASK_PROMPT.md`. A `WAITING_CI` status must include one durable pending tuple:
+
+`<!-- work-reconcile:pr=<number>;target=<pr-ci|main-ci|pages>;sha=<full-sha>;state=pending -->`
+
+Review reconciliation with these rules:
+
+- Only the latest pending PR/target/SHA tuple is eligible, and only while the latest Work state remains `WAITING_CI`.
+- Re-read GitHub state on every run. A changed PR head makes the old `pr-ci` tuple stale; record that once and leave the new revision to its head-update review.
+- PR CI success returns to a full current-head review. PR CI failure, cancellation, or unavailable required checks produce `BLOCKED`.
+- Merged `main` CI success advances once to a Pages pending tuple for the same SHA. A terminal non-success produces `BLOCKED`.
+- Pages success produces `DEPLOY_CONFIRMED`. A terminal non-success, missing evidence, or stale SHA produces `BLOCKED`.
+- Before commenting, search for the exact PR/target/SHA/result marker. Existing evidence means no new comment. `success`, `failure`, and `stale` stop reconciliation for that tuple.
+- The reconciler never creates a repair handoff, changes a branch, merges, or starts the next task. Those actions remain behind their normal review and human-decision gates.
+
+Evidence should cover PR CI pending→success/failure, merge→main CI pending→success/failure, Pages pending→success/failure, stale head handling, and duplicate reconciliation as a no-op.
+
 ## Event-trigger safety
 
 The Work webhook task should react only to supported pull-request activity for this repository. It must ignore events that do not change review state and should not generate a next Issue merely because a comment arrived.
