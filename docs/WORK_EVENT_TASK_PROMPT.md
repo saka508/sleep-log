@@ -56,9 +56,15 @@ For every triggered pull-request event:
    - explicit non-goals;
    - required tests/evidence;
    - an instruction for Codex to update the SAME PR branch.
-     Prefer the Codex PR review/conversation path. A Codex response acknowledges the handoff but does not complete it. A new head SHA is only a candidate completion: start a fresh review of that head and its CI before deciding whether the finding is resolved. Do not blindly redispatch an old-head task after a head change.
-9. If a Codex task cannot attach to the configured repository environment, set `BLOCKED`. Do not repeatedly mention Codex in a loop.
-10. Use `NEEDS_HUMAN` and stop when the change affects:
+     This persists the handoff; it does not prove that Codex execution started. Do not require or retry the legacy GitHub `@codex` invocation, and do not claim that Work directly started a New Codex Cloud task.
+9. The current implementation path has one human action: start New Codex Cloud with the existing `sleep-log` environment. New Codex Cloud then uses the connected GitHub connector to retrieve the PR, select the latest incomplete `work-to-codex` handoff, re-confirm its PR/head/task marker, implement and verify only that bounded repair on the same PR branch, and push that branch. The resulting head update is the event supervisor's re-evaluation trigger.
+10. Track the handoff lifecycle explicitly:
+    - `handoff persisted`: Work wrote the marker and bounded instruction to the PR;
+    - `Codex retrieval/acknowledgement`: New Codex Cloud retrieved the handoff and confirmed its PR, head SHA, and task ID;
+    - `completion`: the repair commit was pushed to the same PR branch and GitHub reports the new full head SHA.
+      Acknowledgement is not completion. After completion, start a fresh review of the new head and its CI before deciding whether the finding is resolved.
+11. A failed legacy `@codex` repository-environment attachment is not by itself `BLOCKED` when the New Codex Cloud plus connected GitHub connector path can retrieve and update the PR. Set `BLOCKED` only when no documented path can retrieve the handoff or update the same PR branch. Do not repeatedly mention Codex in a loop.
+12. Use `NEEDS_HUMAN` and stop when the change affects:
     - roadmap purpose/order or accepted decisions;
     - persistent storage format or AsyncStorage keys;
     - migration;
@@ -70,10 +76,10 @@ For every triggered pull-request event:
     - medical/safety wording;
     - a materially new UI direction;
     - any ambiguity that changes user-visible meaning, privacy, cost, or safety.
-11. A PR cannot be `READY_FOR_MERGE` unless acceptance criteria are satisfied and required PR checks are successful.
-12. Do not enable or perform automatic merge.
-13. After merge, verify the latest `main` validation and the corresponding GitHub Pages deployment. Pending, failed, cancelled, stale, unavailable, or unverified states are blocking.
-14. Only `DEPLOY_CONFIRMED` permits selecting the next task from `docs/DEVELOPMENT_PLAN.md`.
-15. Never start more than one new development task from one event.
+13. A PR cannot be `READY_FOR_MERGE` unless acceptance criteria are satisfied and required PR checks are successful.
+14. Do not enable or perform automatic merge.
+15. After merge, verify the latest `main` validation and the corresponding GitHub Pages deployment. Pending, failed, cancelled, stale, unavailable, or unverified states are blocking.
+16. Only `DEPLOY_CONFIRMED` permits selecting the next task from `docs/DEVELOPMENT_PLAN.md`.
+17. Never start more than one new development task from one event.
 
 When posting a status comment, include the state, PR number, full head SHA, CI status, blocking reason if any, and the exact next action.
