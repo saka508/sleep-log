@@ -36,7 +36,7 @@ Before editing, Codex records:
 
 Use one bounded task per branch and PR. Start from the agreed base, use a `codex/` branch by default, never force-push, and never stage by glob or `git add .`. Inspect the final diff and stage only the task files. Do not delete, reformat, move, commit, or "clean up" unrelated local changes.
 
-The repository's current deploy workflow runs its checks on pushes to `main` (and manual dispatch), not on every pull request. Therefore, a PR must report local verification before merge; its GitHub Actions deploy result is confirmed after a merge to `main` unless a separate, approved PR-check workflow exists.
+The repository's current deploy workflow runs verification on pull requests targeting `main` and again on non-PR deployment runs. Pull-request runs execute type check, lint, tests, and the web export but never deploy. A merge must not be recommended while required PR checks are pending or failing. After merge, Work must separately verify the `main` run and Pages deployment; pending, failed, or unverified post-merge state blocks the next task.
 
 ## Protected data and compatibility rules
 
@@ -81,11 +81,29 @@ The current home AI card is a non-networked, non-diagnostic placeholder. Do not 
 
 ## Autonomous loop
 
-1. Work converts an approved goal into one Issue using the repository template and links the relevant authoritative sections.
-2. Codex completes preflight, confirms scope and protected boundaries, then implements the smallest coherent change and its focused tests.
-3. Codex runs the required checks, inspects the diff, documents compatibility and UI evidence, and opens or updates one focused PR using the PR template.
-4. Work reviews the PR with [`docs/WORK_AUTONOMOUS_REVIEW.md`](docs/WORK_AUTONOMOUS_REVIEW.md). It either gives concrete, file- and behavior-specific repair instructions to Codex, approves the completion evidence, or requests a human decision.
-5. After the approved merge, GitHub provides the `main` Actions/deploy result. Work records any failure as a follow-up Issue and decides whether the next safe work unit may start.
+GitHub is the bridge between Work and Codex. Do not assume a private direct Work → Codex handoff exists.
+
+1. Work converts an approved goal into one bounded Issue and links the relevant authoritative sections.
+2. Codex implements one coherent change, runs the required checks, and opens or updates one focused PR.
+3. A Work event-triggered task watches supported pull-request activity in the authorized repository and reviews the current PR state.
+4. Work compares the Issue, authoritative documents, current head SHA, diff, reviews, comments, and CI state.
+5. If a repair is required, Work writes one concrete PR instruction for Codex. Prefer the Codex pull-request review/conversation path when available. A handoff is not considered accepted until Codex actually responds or produces a new revision.
+6. Codex repairs the same branch/PR, runs verification, and reports the changed head SHA and evidence.
+7. A later PR event triggers Work again. Work re-reviews the new revision rather than trusting the prior result.
+8. When all acceptance criteria are met and PR checks succeed, Work may recommend merge. Automatic merge is intentionally disabled at this stage.
+9. After merge, Work verifies the `main` Actions run and Pages deployment. Only a confirmed success may unlock the next task.
+
+### Event-triggered Work task
+
+The Work task may watch supported GitHub pull-request activity such as PR open/ready events, reviews, comments, commit updates, and completed merges. Its prompt must limit the task to `saka508/sleep-log` and the current PR, and must require the authoritative reading order before any recommendation.
+
+The event task must be idempotent. Before issuing a Codex repair instruction, check the PR conversation for a marker in this form:
+
+`<!-- work-to-codex:pr=<number>;head=<full-sha>;task=<stable-id> -->`
+
+If the same PR number, head SHA, and task ID already exist, do not issue the same instruction again. A new head SHA permits a new review cycle. Bot acknowledgement, task creation, implementation completion, and CI success are separate states and must not be conflated.
+
+If a GitHub `@codex` task comment fails to attach to the configured Codex environment, record the handoff as blocked instead of retrying indefinitely. The documented Codex code-review conversation may still be used to review the PR or prepare a bounded fix.
 
 Codex may autonomously inspect, implement, test, repair, improve documentation that reflects already-approved behavior, and update PR evidence within the approved Issue scope. It must request human confirmation before changing the roadmap's purpose/order, accepted decisions, persistent data contracts, migrations, CSV meaning/order, deletion semantics, external AI or data transmission, Health/permission behavior, release publication, or a materially new visual direction. Human confirmation is also required when an ambiguity changes user-visible meaning, privacy, cost, safety, or the scope of an Issue.
 
@@ -97,4 +115,4 @@ A work unit is complete only when its Issue acceptance criteria are met, its cha
 
 ## Current priority
 
-At the time this workflow was added, the next planned work is Phase 5.5: clarify and protect the treatment of missing values versus zero for sleepiness, clarity, naps, and the AsyncStorage/CSV path. Do not auto-convert, discard, or overwrite ambiguous existing records. This unit excludes exercise and nutrition implementation, Health/smartwatch work, and AI communication. Re-read the authoritative plan at the start of every Issue; it is the source for any later priority change.
+Do not hard-code a phase priority in this operating guide. Re-read `docs/DEVELOPMENT_PLAN.md` at the start of every Issue and after each successful merge/deploy cycle. The plan is the source of truth for the next safe work unit.
