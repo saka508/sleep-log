@@ -10,6 +10,7 @@ import {
   getMetricValue,
   getSleepStats,
   normalizeSleepRecord,
+  observedHeadacheIntensity,
   sleepMinutesFromTimes,
   timeToMinutes,
   todayKey,
@@ -279,6 +280,40 @@ describe("stored record compatibility", () => {
     const reloaded = recordsFromCsv(recordsToCsv([missing!, zero!]));
     expect(reloaded[0]).not.toHaveProperty("headacheIntensity");
     expect(reloaded[1]).toMatchObject({ headacheIntensity: 0 });
+  });
+
+  it("accepts only an explicit integer headache intensity observation and keeps no-headache zero out of analysis", () => {
+    const base = {
+      id: "2026-09-12", date: "2026-09-12", bedTime: "23:30", wakeTime: "07:00", sleepMinutes: 450,
+      caffeine: false, headache: true, note: "", createdAt: "2026-09-12T00:00:00.000Z", updatedAt: "2026-09-12T00:00:00.000Z",
+    };
+    for (const invalid of [undefined, null, "", "NaN", Number.NaN, -1, 11, 3.5]) {
+      expect(normalizeSleepRecord({ ...base, headacheIntensity: invalid } as unknown as Partial<SleepRecord>)).not.toHaveProperty("headacheIntensity");
+    }
+    const zero = normalizeSleepRecord({ ...base, headacheIntensity: "0" } as unknown as Partial<SleepRecord>)!;
+    const noHeadache = normalizeSleepRecord({ ...base, headache: false, headacheIntensity: 0 })!;
+
+    expect(zero).toMatchObject({ headacheIntensity: 0 });
+    expect(observedHeadacheIntensity(zero)).toBe(0);
+    expect(noHeadache).toMatchObject({ headacheIntensity: 0 });
+    expect(observedHeadacheIntensity(noHeadache)).toBeNull();
+  });
+
+  it("keeps CSV blank and zero distinct while excluding invalid headache intensities", () => {
+    const header = "日付,就寝時刻,起床時刻,実睡眠時間（分）,寝つくまで（分）,昼寝時間（分）,眠気（0-10）,頭の冴え（0-10）,カフェイン,頭痛,メモ,頭痛の強さ（0-10）";
+    const csv = [
+      header,
+      ["2026-09-13", "23:30", "07:00", "450", "", "", "", "", "なし", "なし", "頭痛なし", "0"].join(","),
+      ["2026-09-14", "23:30", "07:00", "450", "", "", "", "", "なし", "あり", "未入力", ""].join(","),
+      ["2026-09-15", "23:30", "07:00", "450", "", "", "", "", "なし", "あり", "明示ゼロ", "0"].join(","),
+      ["2026-09-16", "23:30", "07:00", "450", "", "", "", "", "なし", "あり", "不正", "11"].join(","),
+    ].join("\n");
+    const [noHeadache, missing, zero, invalid] = recordsFromCsv(csv);
+
+    expect(noHeadache).toMatchObject({ headache: false, headacheIntensity: 0 });
+    expect(missing).not.toHaveProperty("headacheIntensity");
+    expect(zero).toMatchObject({ headache: true, headacheIntensity: 0 });
+    expect(invalid).not.toHaveProperty("headacheIntensity");
   });
 
 });
