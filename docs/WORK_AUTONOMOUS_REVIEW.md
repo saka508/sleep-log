@@ -54,7 +54,7 @@ Read, in order:
 
 - Confirm the reported commands and outcomes for `corepack pnpm check`, `corepack pnpm lint`, `corepack pnpm test`, `corepack pnpm exec expo export --platform web`, and `git diff --check`; require focused regression tests for touched contracts.
 - Require Android/PWA smoke evidence when the change touches platform behavior, service worker, permissions, native modules, release packaging, or platform-specific UI.
-- Confirm the actual GitHub Actions trigger. The current deploy workflow checks and deploys on a push to `main` or manual dispatch, so a PR has local verification before merge and a `main` Actions/deploy result after merge unless an approved PR-check workflow is added.
+- Confirm the actual GitHub Actions trigger. The current workflow verifies pull requests targeting `main` with type check, lint, tests, and web export. Pull-request runs do not deploy. Pending or failing PR checks block merge recommendation. After merge, separately verify the `main` verification and Pages deployment; pending, failed, or unverified post-merge state blocks the next task.
 
 ### Source synchronization and unknowns
 
@@ -81,3 +81,39 @@ Stop and request a human decision before approving work that changes a persisten
 ## Completion and next Issue
 
 Work can recommend the PR for merge only when all acceptance criteria, scope boundaries, compatibility checks, required verification, UI evidence, and disclosed unknowns are satisfactory; blocking review comments and required human decisions must be resolved first. After merge, check the `main` Actions/deploy result. Mark a Phase ready to advance only when the authoritative plan's Definition of Done and transition condition are evidenced. Then create the next smallest safe Issue from the plan's current priority; do not skip a quality gate merely because a later feature is attractive.
+
+
+## Work → Codex handoff protocol
+
+GitHub PR state is the durable bridge. Work must not claim that it directly dispatched a Codex task unless the selected Codex surface actually accepted it.
+
+Before sending a repair instruction:
+
+1. Re-read the Issue and the three authoritative documents.
+2. Confirm the PR number, full head SHA, changed files, unresolved comments, and current CI.
+3. Reduce the finding to one bounded repair with explicit non-goals and verification.
+4. Search the PR conversation for an existing marker:
+   `<!-- work-to-codex:pr=<number>;head=<full-sha>;task=<stable-id> -->`
+5. If the same PR/head/task marker already exists, do not duplicate the instruction.
+6. Post the marker and the actionable instruction through the supported Codex PR conversation/review path.
+7. Treat acknowledgement, a new Codex task, a pushed commit, CI, and merge as separate states.
+
+If Codex cannot attach to the repository environment, record `BLOCKED_HANDOFF` and stop automated repair. Do not loop on repeated mentions. A human may switch to Codex Code Review / Cloud and continue from the same Issue and PR.
+
+After Codex produces a new head SHA, the next Work trigger starts a new review cycle. Work must re-check the new diff and checks instead of assuming the requested repair was implemented correctly.
+
+## Event-trigger safety
+
+The Work webhook task should react only to supported pull-request activity for this repository. It must ignore events that do not change review state and should not generate a next Issue merely because a comment arrived.
+
+Recommended state outcomes are:
+
+- `NO_ACTION`: no relevant change or duplicate event.
+- `NEEDS_CODEX`: one bounded repair can proceed without a human product decision.
+- `NEEDS_HUMAN`: a protected decision gate is reached.
+- `WAITING_CI`: required PR or main checks are pending.
+- `BLOCKED`: checks failed, merge conflict exists, or Codex handoff is unavailable.
+- `READY_FOR_MERGE`: acceptance criteria met and required PR checks passed.
+- `DEPLOY_CONFIRMED`: merged main revision and Pages deployment both confirmed successful.
+
+Only `DEPLOY_CONFIRMED` allows Work to select the next task automatically.
