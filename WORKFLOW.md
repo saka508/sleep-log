@@ -81,17 +81,19 @@ The current home AI card is a non-networked, non-diagnostic placeholder. Do not 
 
 ## Autonomous loop
 
-GitHub is the bridge between Work and Codex. Do not assume a private direct Work → Codex handoff exists.
+GitHub is the bridge between Work and Codex. There is no direct Work → New Codex Cloud dispatch in the current workflow.
 
 1. Work converts an approved goal into one bounded Issue and links the relevant authoritative sections.
 2. Codex implements one coherent change, runs the required checks, and opens or updates one focused PR.
 3. A Work event-triggered task watches supported pull-request activity in the authorized repository and reviews the current PR state.
 4. Work compares the Issue, authoritative documents, current head SHA, diff, reviews, comments, and CI state.
-5. If a repair is required, Work writes one concrete PR instruction for Codex. Prefer the Codex pull-request review/conversation path when available. A handoff is not considered accepted until Codex actually responds or produces a new revision.
-6. Codex repairs the same branch/PR, runs verification, and reports the changed head SHA and evidence.
-7. A later PR event triggers Work again. Work re-reviews the new revision rather than trusting the prior result.
-8. When all acceptance criteria are met and PR checks succeed, Work may recommend merge. Automatic merge is intentionally disabled at this stage.
-9. After merge, Work verifies the `main` Actions run and Pages deployment. Only a confirmed success may unlock the next task.
+5. If a repair is required, Work persists one concrete PR instruction with a deterministic task ID. Persistence does not start Codex, and the legacy GitHub `@codex` invocation is not a required path.
+6. A human starts New Codex Cloud with the existing `sleep-log` environment. This is the workflow's only manual start action; no unavailable Work → New Codex Cloud dispatch is assumed.
+7. New Codex Cloud uses the connected GitHub connector to retrieve the PR and latest incomplete handoff, confirms the PR/head/task marker, and repairs only that bounded scope on the same branch/PR.
+8. New Codex Cloud runs verification and pushes the same PR branch. The new full head SHA is completion evidence and triggers Work re-evaluation.
+9. Work re-reviews the new revision and CI rather than trusting acknowledgement or the prior result.
+10. When all acceptance criteria are met and PR checks succeed, Work may recommend merge. Automatic merge is intentionally disabled at this stage.
+11. After merge, Work verifies the `main` Actions run and Pages deployment. Only a confirmed success may unlock the next task.
 
 ### Event-triggered Work task
 
@@ -103,9 +105,19 @@ The event task must be idempotent. Before issuing a Codex repair instruction, ch
 
 The task ID identifies the canonical finding, not the event that reported it. Use `review-comment-<immutable-numeric-comment-id>` for a review-comment finding and an equivalent immutable GitHub object ID, such as `issue-comment-<immutable-numeric-comment-id>`, for another anchored finding. If no immutable GitHub object anchors it, use a canonical source coordinate: `issue-<issue-number>-criterion-<ordinal>` for an Issue acceptance criterion or `doc-<path>-heading-<slug>-rule-<ordinal>` for an authoritative documented rule. Derive the coordinate from that source at the reviewed head, never from delivery metadata, time, run identity, actor, or paraphrased text. Recover and reuse the task ID from an existing marker for the same canonical source. If the source identity is ambiguous, record `BLOCKED` rather than dispatching.
 
-Immediately before posting, re-read the current full head SHA and existing markers. If the same PR number, head SHA, and task ID already exist, the repair is pending or acknowledged; do not issue it again. A comment event and review event for the same review comment therefore produce the same ID and one dispatch, while separate source anchors remain separate findings. A Codex response is acknowledgement, not completion. A new head SHA starts a fresh review cycle: inspect the new diff and CI before deciding that the finding is complete or issuing any further instruction. Bot acknowledgement, task creation, implementation completion, and CI success are separate states and must not be conflated.
+Immediately before posting, re-read the current full head SHA and existing markers. If the same PR number, head SHA, and task ID already exist, the repair is pending or acknowledged; do not issue it again. A comment event and review event for the same review comment therefore produce the same ID and one dispatch, while separate source anchors remain separate findings.
 
-If a GitHub `@codex` task comment fails to attach to the configured Codex environment, record the handoff as blocked instead of retrying indefinitely. The documented Codex code-review conversation may still be used to review the PR or prepare a bounded fix.
+Use three explicit lifecycle states:
+
+- `handoff persisted`: Work wrote the marker and bounded repair to the PR. Work must not report this as task start or acknowledgement.
+- `Codex retrieval/acknowledgement`: New Codex Cloud, running in the existing `sleep-log` environment, retrieved the handoff through the connected GitHub connector and confirmed its PR, full head SHA, and task ID.
+- `completion`: New Codex Cloud pushed the repair commit to the same PR branch and GitHub reports the new full head SHA.
+
+Acknowledgement is not completion, and CI success remains separate. A new head starts a fresh review cycle: inspect its diff and CI before deciding that the finding is resolved or issuing another instruction.
+
+The current path requires one human action to start the New Codex Cloud task. After that start, Codex retrieves the latest incomplete handoff, performs only that bounded repair, verifies it, and pushes the same branch. The head update triggers the Work event supervisor. Do not claim or depend on a nonexistent direct Work → New Codex Cloud dispatch.
+
+The legacy GitHub `@codex` invocation is optional and is not the required implementation path. If its repository-environment attachment fails, do not retry it and do not mark the workflow `BLOCKED` when New Codex Cloud plus the connected GitHub connector can still retrieve and update the PR. Use `BLOCKED` with a handoff-specific reason only when no documented path can retrieve the handoff or update the same PR branch.
 
 Codex may autonomously inspect, implement, test, repair, improve documentation that reflects already-approved behavior, and update PR evidence within the approved Issue scope. It must request human confirmation before changing the roadmap's purpose/order, accepted decisions, persistent data contracts, migrations, CSV meaning/order, deletion semantics, external AI or data transmission, Health/permission behavior, release publication, or a materially new visual direction. Human confirmation is also required when an ambiguity changes user-visible meaning, privacy, cost, safety, or the scope of an Issue.
 
