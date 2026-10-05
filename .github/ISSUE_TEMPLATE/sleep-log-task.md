@@ -56,3 +56,13 @@ assignees: ""
 ## 関連Issue / PR
 
 <!-- `Closes #123`、依存Issue、既存PR、関連commitを記す。 -->
+
+
+## 自動化メタデータ
+
+<!-- Work/Codex自動ループを使う場合だけ記入。 -->
+- PR:
+- 現在のhead SHA:
+- Work状態: `NO_ACTION | NEEDS_CODEX | NEEDS_HUMAN | WAITING_CI | BLOCKED | READY_FOR_MERGE | DEPLOY_CONFIRMED`
+- Codex handoff task ID:
+- 次タスク開始条件: `DEPLOY_CONFIRMED` のみ
