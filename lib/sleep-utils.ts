@@ -100,6 +100,16 @@ export function observedHeadacheIntensity(record: Pick<SleepRecord, "headache" |
   return record.headache ? toHeadacheIntensity(record.headacheIntensity) ?? null : null;
 }
 
+export type DailyHeadacheDisplayState = "none" | "missing" | "observed";
+
+export function getDailyHeadacheDisplay(record: Pick<SleepRecord, "headache" | "headacheIntensity">) {
+  if (!record.headache) return { state: "none" as const, label: "頭痛なし", intensity: undefined };
+  const intensity = toHeadacheIntensity(record.headacheIntensity);
+  return intensity === undefined
+    ? { state: "missing" as const, label: "頭痛あり・強度未記録", intensity: undefined }
+    : { state: "observed" as const, label: `頭痛あり・強度${intensity}`, intensity };
+}
+
 /** Normalize records loaded from AsyncStorage or CSV without rejecting legacy data. */
 export function normalizeSleepRecord(value: Partial<SleepRecord>): SleepRecord | null {
   if (!value.date || !value.id || !value.bedTime || !value.wakeTime) return null;

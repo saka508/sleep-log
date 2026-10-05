@@ -9,6 +9,7 @@ import {
   formatDuration,
   getMetricValue,
   getSleepStats,
+  getDailyHeadacheDisplay,
   normalizeSleepRecord,
   observedHeadacheIntensity,
   sleepMinutesFromTimes,
@@ -297,6 +298,13 @@ describe("stored record compatibility", () => {
     expect(observedHeadacheIntensity(zero)).toBe(0);
     expect(noHeadache).toMatchObject({ headacheIntensity: 0 });
     expect(observedHeadacheIntensity(noHeadache)).toBeNull();
+  });
+
+  it("keeps daily headache display states distinct", () => {
+    expect(getDailyHeadacheDisplay({ headache: false, headacheIntensity: 0 })).toEqual({ state: "none", label: "頭痛なし", intensity: undefined });
+    expect(getDailyHeadacheDisplay({ headache: true, headacheIntensity: undefined })).toEqual({ state: "missing", label: "頭痛あり・強度未記録", intensity: undefined });
+    expect(getDailyHeadacheDisplay({ headache: true, headacheIntensity: 0 })).toEqual({ state: "observed", label: "頭痛あり・強度0", intensity: 0 });
+    expect(getDailyHeadacheDisplay({ headache: true, headacheIntensity: 4 })).toEqual({ state: "observed", label: "頭痛あり・強度4", intensity: 4 });
   });
 
   it("keeps CSV blank and zero distinct while excluding invalid headache intensities", () => {

@@ -10,7 +10,7 @@ import { useColors } from "@/hooks/use-colors";
 import { analyzeRelation, buildTrend, formatAnalysisMetric, getAnalysisMetricLabel, recordsForActualSleepAnalysis, summarizeTrend, type AnalysisGranularity, type AnalysisMetric, type AnalysisQuality } from "@/lib/condition-analysis";
 import { Collapsible } from "@/components/ui/collapsible";
 import { useSleepData } from "@/lib/sleep-store";
-import { formatDuration, formatShortDate, getHeadacheFeatureLabel, timeToMinutes, type SleepRecord } from "@/lib/sleep-utils";
+import { formatDuration, formatShortDate, getDailyHeadacheDisplay, getHeadacheFeatureLabel, timeToMinutes, type SleepRecord } from "@/lib/sleep-utils";
 
 const METRIC_OPTIONS: { value: AnalysisMetric; label: string }[] = [
   { value: "sleepMinutes", label: "睡眠" }, { value: "bedTime", label: "就寝" }, { value: "wakeTime", label: "起床" }, { value: "napMinutes", label: "昼寝" },
@@ -134,7 +134,15 @@ export function ConditionPanel({ trends, colors }: { trends: CategoryTrends; col
 
 export function HeadachePanel({ events, dailyHeadacheDays, personalRecords, trends, colors }: { events: import("@/lib/headache-events").HeadacheEvent[]; dailyHeadacheDays: number; personalRecords: SleepRecord[]; trends: CategoryTrends; colors: ReturnType<typeof useColors> }) {
   const recentEvents = events.slice(0, 6);
-  return <Card style={styles.panelCard}><Text style={[styles.panelTitle, { color: colors.foreground }]}>頭痛の記録</Text><View style={styles.statsGrid}><View style={styles.statBox}><MetricCard label="日次記録" value={personalRecords.length ? `${dailyHeadacheDays} 日` : "データなし"} icon="event" accent={colors.sleepHeadache} /></View><View style={styles.statBox}><MetricCard label="イベント" value={events.length ? `${events.length} 件` : "データなし"} icon="notifications-none" accent={colors.sleepHeadache} /></View></View><TrendBars points={trends.headache} formatValue={(value) => `${value.toFixed(1)} / 10`} accent={colors.sleepHeadache} title="日次頭痛強度" /><Text style={[styles.note, { color: colors.muted }]}>日次記録と頭痛イベントは別の保存元です。ここでは混在させず、個別に表示します。</Text>{recentEvents.length ? <View style={styles.eventList}>{recentEvents.map((event) => <View key={event.id} style={[styles.eventRow, { borderColor: colors.border }]}><Text style={[styles.eventDate, { color: colors.foreground }]}>{formatShortDate(event.date)} {new Date(event.startedAt).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}</Text><Text style={[styles.eventMeta, { color: colors.muted }]}>{event.severity === null ? "強さ 未入力" : `強さ ${event.severity} / 10`} · {event.symptoms.length ? event.symptoms.map(getHeadacheFeatureLabel).join("・") : "症状未入力"}</Text></View>)}</View> : <Text style={[styles.note, { color: colors.muted }]}>頭痛イベントはまだありません。</Text>}</Card>;
+  const stateCounts = personalRecords.reduce((counts, record) => {
+    const display = getDailyHeadacheDisplay(record);
+    if (display.state === "none") counts.none += 1;
+    else if (display.state === "missing") counts.missing += 1;
+    else if (display.intensity === 0) counts.zero += 1;
+    else counts.positive += 1;
+    return counts;
+  }, { none: 0, missing: 0, zero: 0, positive: 0 });
+  return <Card style={styles.panelCard}><Text style={[styles.panelTitle, { color: colors.foreground }]}>頭痛の記録</Text><View style={styles.statsGrid}><View style={styles.statBox}><MetricCard label="日次記録" value={personalRecords.length ? `${dailyHeadacheDays} 日` : "データなし"} icon="event" accent={colors.sleepHeadache} /></View><View style={styles.statBox}><MetricCard label="イベント" value={events.length ? `${events.length} 件` : "データなし"} icon="notifications-none" accent={colors.sleepHeadache} /></View></View><Text style={[styles.stateSummary, { color: colors.muted }]}>日次状態：頭痛なし {stateCounts.none}日・強度未記録 {stateCounts.missing}日・強度0 {stateCounts.zero}日・強度1〜10 {stateCounts.positive}日</Text><TrendBars points={trends.headache} formatValue={(value) => `${value.toFixed(1)} / 10`} accent={colors.sleepHeadache} title="日次頭痛強度" /><Text style={[styles.note, { color: colors.muted }]}>日次記録と頭痛イベントは別の保存元です。ここでは混在させず、個別に表示します。</Text>{recentEvents.length ? <View style={styles.eventList}>{recentEvents.map((event) => <View key={event.id} style={[styles.eventRow, { borderColor: colors.border }]}><Text style={[styles.eventDate, { color: colors.foreground }]}>{formatShortDate(event.date)} {new Date(event.startedAt).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}</Text><Text style={[styles.eventMeta, { color: colors.muted }]}>{event.severity === null ? "強さ 未入力" : `強さ ${event.severity} / 10`} · {event.symptoms.length ? event.symptoms.map(getHeadacheFeatureLabel).join("・") : "症状未入力"}</Text></View>)}</View> : <Text style={[styles.note, { color: colors.muted }]}>頭痛イベントはまだありません。</Text>}</Card>;
 }
 
 function TrendBars({ points, formatValue, accent, title }: { points: ReturnType<typeof buildTrend>; formatValue: (value: number) => string; accent: string; title?: string }) {
@@ -217,6 +225,7 @@ const styles = StyleSheet.create({
   barValue: { width: 82, fontSize: 10, lineHeight: 14, fontWeight: "800", textAlign: "right" },
   barMissing: { flex: 1, fontSize: 11, lineHeight: 15, fontWeight: "700" },
   eventList: { gap: 7 },
+  stateSummary: { fontSize: 12, lineHeight: 19, fontWeight: "700" },
   eventRow: { borderBottomWidth: 1, paddingBottom: 7, gap: 2 },
   eventDate: { fontSize: 13, lineHeight: 18, fontWeight: "800" },
   eventMeta: { fontSize: 11, lineHeight: 16 },
