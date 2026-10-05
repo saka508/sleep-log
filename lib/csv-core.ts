@@ -3,6 +3,7 @@ import {
   HEADACHE_FEATURE_OPTIONS,
   isDateKey,
   isTime,
+  toHeadacheIntensity,
   type HeadacheFeature,
   type SleepRecord,
 } from "./sleep-utils";
@@ -109,7 +110,7 @@ export function recordsFromCsv(text: string): SleepRecord[] {
     const source = row[columns.weatherSource]?.trim();
     const fatigue = toOptionalScore(row[columns.fatigue]);
     const muscleFatigue = toOptionalScore(row[columns.muscleFatigue]);
-    const headacheIntensity = toOptionalScore(row[columns.headacheIntensity]);
+    const headacheIntensity = toHeadacheIntensity(row[columns.headacheIntensity]);
     const weather = pressureHpa !== undefined && temperatureC !== undefined && weatherCode !== undefined && condition && fetchedAt && Number.isFinite(Date.parse(fetchedAt)) && source === "Open-Meteo"
       ? { pressureHpa, temperatureC, condition, weatherCode: Math.round(weatherCode), fetchedAt, source: "Open-Meteo" as const }
       : undefined;

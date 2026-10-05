@@ -1,4 +1,4 @@
-import { clockValueForChart, correlation, dateFromKey, formatClockValue, formatDuration, formatShortDate, timeToMinutes, type SleepRecord } from "./sleep-utils";
+import { clockValueForChart, correlation, dateFromKey, formatClockValue, formatDuration, formatShortDate, observedHeadacheIntensity, timeToMinutes, type SleepRecord } from "./sleep-utils";
 
 export type AnalysisGranularity = "day" | "week" | "month";
 
@@ -137,9 +137,7 @@ export function getAnalysisMetricValue(record: SleepRecord, metric: AnalysisMetr
     case "wakeTime":
       return clockValueForChart(record.wakeTime);
     case "headacheIntensity":
-      // A recorded "なし" is a meaningful zero; an "あり" without a selected
-      // strength remains missing instead of being fabricated as zero.
-      return record.headache ? (Number.isFinite(record.headacheIntensity) ? record.headacheIntensity ?? null : null) : 0;
+      return observedHeadacheIntensity(record);
     case "pressureHpa":
       return Number.isFinite(record.weather?.pressureHpa) ? record.weather?.pressureHpa ?? null : null;
     default: {

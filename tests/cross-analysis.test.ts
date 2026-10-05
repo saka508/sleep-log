@@ -149,13 +149,14 @@ describe("cross analysis condition comparison", () => {
     expect(result.exclusions.missingOutcome).toBe(1);
   });
 
-  it("keeps a daily no-headache value as zero instead of treating it as missing", () => {
+  it("excludes no-headache compatibility zeroes while retaining an explicit headache intensity zero", () => {
     const result = analyzeSleepConditionComparison([
       record("2026-09-01", { sleepMinutes: 360, headache: false, headacheIntensity: 0 }),
-      record("2026-09-02", { sleepMinutes: 480, headache: true, headacheIntensity: 6 }),
+      record("2026-09-02", { sleepMinutes: 360, headache: true, headacheIntensity: 0 }),
+      record("2026-09-03", { sleepMinutes: 480, headache: true, headacheIntensity: 6 }),
     ], { ...baseQuery, outcome: "dailyHeadache" });
 
-    expect(result).toMatchObject({ status: "ready", averageDifference: -6, exclusions: { missingOutcome: 0 } });
+    expect(result).toMatchObject({ status: "ready", averageDifference: -6, exclusions: { missingOutcome: 1 } });
     expect(result.groups.matched.observations[0].outcomeValue).toBe(0);
   });
 

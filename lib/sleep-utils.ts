@@ -82,6 +82,24 @@ export function getHeadacheFeatureLabel(feature: HeadacheFeature) {
   return HEADACHE_FEATURE_OPTIONS.find((option) => option.value === feature)?.label ?? feature;
 }
 
+/** A headache intensity is observed only as a finite integer score from 0 to 10. */
+export function toHeadacheIntensity(value: unknown): number | undefined {
+  if (typeof value === "number") {
+    return Number.isFinite(value) && Number.isInteger(value) && value >= 0 && value <= 10 ? value : undefined;
+  }
+  if (typeof value !== "string" || !value.trim()) return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && Number.isInteger(parsed) && parsed >= 0 && parsed <= 10 ? parsed : undefined;
+}
+
+/**
+ * The legacy `headache: false, headacheIntensity: 0` representation remains
+ * serializable, but it is not an observed headache intensity for analysis.
+ */
+export function observedHeadacheIntensity(record: Pick<SleepRecord, "headache" | "headacheIntensity">): number | null {
+  return record.headache ? toHeadacheIntensity(record.headacheIntensity) ?? null : null;
+}
+
 /** Normalize records loaded from AsyncStorage or CSV without rejecting legacy data. */
 export function normalizeSleepRecord(value: Partial<SleepRecord>): SleepRecord | null {
   if (!value.date || !value.id || !value.bedTime || !value.wakeTime) return null;
@@ -112,7 +130,7 @@ export function normalizeSleepRecord(value: Partial<SleepRecord>): SleepRecord |
   const fatigue = optionalScore(value.fatigue);
   const muscleFatigue = optionalScore(value.muscleFatigue);
   const headache = Boolean(value.headache);
-  const headacheIntensity = optionalScore(value.headacheIntensity);
+  const headacheIntensity = toHeadacheIntensity(value.headacheIntensity);
   const caffeine = Boolean(value.caffeine);
   const headacheFeatures = Array.isArray(value.headacheFeatures)
     ? [...new Set(value.headacheFeatures.filter((feature): feature is HeadacheFeature => HEADACHE_FEATURE_VALUES.has(feature as HeadacheFeature)))]

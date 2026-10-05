@@ -37,14 +37,20 @@ describe("condition analysis trends", () => {
     expect(summarizeTrend(trend)).toMatchObject({ dataDays: 1, average: 1002, median: 1002 });
   });
 
-  it("keeps headache intensity missing when headache is recorded without a selected strength, while preserving zero", () => {
+  it("uses only an explicit headache observation for intensity trends and quality metadata", () => {
     const trend = buildTrend([
-      record("2026-09-01", { headache: true, headacheIntensity: undefined }),
-      record("2026-09-02", { headache: true, headacheIntensity: 0 }),
+      record("2026-09-01", { headache: false, headacheIntensity: 0 }),
+      record("2026-09-02", { headache: true, headacheIntensity: undefined }),
+      record("2026-09-03", { headache: true, headacheIntensity: 0 }),
     ], "headacheIntensity", "day");
 
-    expect(trend.map((point) => point.value)).toEqual([null, 0]);
+    expect(trend.map((point) => point.value)).toEqual([null, null, 0]);
     expect(summarizeTrend(trend)).toMatchObject({ dataDays: 1, average: 0, median: 0 });
+    expect(assessAnalysisQuality([
+      record("2026-09-01", { headache: false, headacheIntensity: 0 }),
+      record("2026-09-02", { headache: true, headacheIntensity: undefined }),
+      record("2026-09-03", { headache: true, headacheIntensity: 0 }),
+    ], "headacheIntensity", "day", [])).toMatchObject({ validMetricRecords: 1, missingMetricRecords: 2 });
   });
 
   it("uses local calendar weeks and averages only present values", () => {
