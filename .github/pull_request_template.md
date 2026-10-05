@@ -53,7 +53,7 @@
 
 ## 未確認事項
 
-<!-- CIがmain push後のみの確認であること、実機未確認、要人間判断などを隠さず列挙する。なければ「なし」。 -->
+<!-- PR CI、実機未確認、要人間判断、merge後main/Pages未確認などを隠さず列挙する。なければ「なし」。 -->
 
 ## Workレビュー向け確認ポイント
 
@@ -63,3 +63,14 @@
 - [ ] 日付・日跨ぎ、詳細分析 / 高度な分析の責務を崩していない
 - [ ] モバイルUIのoverflow、白背景露出、文字切れがない
 - [ ] 正本、テスト、CI状態、未確認事項が正しく記載されている
+
+
+## 自動レビュー状態
+
+- Work状態: `NO_ACTION | NEEDS_CODEX | NEEDS_HUMAN | WAITING_CI | BLOCKED | READY_FOR_MERGE`
+- 対象head SHA:
+- Codex handoff marker:
+- PR CI:
+- merge後 main CI / Pages: `未実施 | pending | failure | success`
+
+> merge後の main CI / Pages が success と確認されるまでは、次タスクを開始しない。
