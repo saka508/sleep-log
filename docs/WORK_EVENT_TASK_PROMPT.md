@@ -15,6 +15,8 @@ Use supported GitHub pull-request activity such as:
 - pull request commit/head updated
 - pull request merged
 
+Do not assume that workflow, check, or Pages deployment completion will trigger this pull-request task. If the configured Work surface cannot subscribe to those completion events, also create the hourly reconciliation task defined below.
+
 ## Work prompt
 
 You supervise Sleep Log development. GitHub is the durable bridge between Work and Codex.
@@ -82,4 +84,23 @@ For every triggered pull-request event:
 16. Only `DEPLOY_CONFIRMED` permits selecting the next task from `docs/DEVELOPMENT_PLAN.md`.
 17. Never start more than one new development task from one event.
 
-When posting a status comment, include the state, PR number, full head SHA, CI status, blocking reason if any, and the exact next action.
+When posting a status comment, include the state, PR number, full head SHA, CI status, blocking reason if any, and the exact next action. For `WAITING_CI`, also persist exactly one pending target marker:
+
+`<!-- work-reconcile:pr=<number>;target=<pr-ci|main-ci|pages>;sha=<full-sha>;state=pending -->`
+
+## Hourly reconciliation task
+
+Use this supplemental task only when supported workflow/check/deployment completion events cannot trigger Work. Run it hourly and use this prompt:
+
+You reconcile only pending CI and Pages observations for `saka508/sleep-log`. GitHub PR comments are the durable queue.
+
+1. Search open and recently merged PR conversations for their latest `work-reconcile` marker. Process only a marker whose latest state for the same PR/target/SHA tuple is `pending` and whose latest Work state is `WAITING_CI`.
+2. Before acting, re-read the PR, full current head or merged `main` SHA, latest Work status, existing reconciliation markers, relevant GitHub Actions run, and Pages deployment.
+3. If a `pr-ci` marker's SHA is no longer the current PR head, record it as `stale` once and stop processing that tuple. The head-update event owns the new revision; never carry an old check result forward.
+4. Apply only these transitions:
+   - `pr-ci` pending remains `WAITING_CI`; success triggers a full current-head review and the appropriate existing state; failure, cancellation, or unavailable required checks produce `BLOCKED`.
+   - `main-ci` pending remains `WAITING_CI`; success creates one `pages` pending marker for the same merged `main` SHA; failure, cancellation, stale SHA, or unavailable required checks produce `BLOCKED`.
+   - `pages` pending remains `WAITING_CI`; success produces `DEPLOY_CONFIRMED`; failure, cancellation, stale SHA, or unavailable deployment evidence produce `BLOCKED`.
+5. Before posting, search for an existing marker with the exact PR/target/SHA/result tuple. If it exists, post nothing. Otherwise post one result marker using `state=<pending|success|failure|stale>` and at most one corresponding Work status comment.
+6. A tuple stops being eligible after `success`, `failure`, or `stale`. A PR stops being eligible when its latest Work state is not `WAITING_CI`. Do not create repeated pending comments.
+7. Reconciliation observes state only. It must not duplicate a `work-to-codex` marker, dispatch a repair, merge a PR, alter a branch, or create the next task. Existing deterministic handoff rules still govern any later bounded repair.
