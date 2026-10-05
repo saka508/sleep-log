@@ -82,7 +82,6 @@ Stop and request a human decision before approving work that changes a persisten
 
 Work can recommend the PR for merge only when all acceptance criteria, scope boundaries, compatibility checks, required verification, UI evidence, and disclosed unknowns are satisfactory; blocking review comments and required human decisions must be resolved first. After merge, check the `main` Actions/deploy result. Mark a Phase ready to advance only when the authoritative plan's Definition of Done and transition condition are evidenced. Then create the next smallest safe Issue from the plan's current priority; do not skip a quality gate merely because a later feature is attractive.
 
-
 ## Work → Codex handoff protocol
 
 GitHub PR state is the durable bridge. Work must not claim that it directly dispatched a Codex task unless the selected Codex surface actually accepted it.
@@ -92,11 +91,16 @@ Before sending a repair instruction:
 1. Re-read the Issue and the three authoritative documents.
 2. Confirm the PR number, full head SHA, changed files, unresolved comments, and current CI.
 3. Reduce the finding to one bounded repair with explicit non-goals and verification.
-4. Search the PR conversation for an existing marker:
+4. Assign the finding's reproducible task ID from its canonical source:
+   - use `review-comment-<immutable-numeric-comment-id>` for a GitHub review comment;
+   - otherwise use another immutable GitHub anchor such as `issue-comment-<immutable-numeric-comment-id>`;
+   - without an immutable GitHub anchor, use `issue-<issue-number>-criterion-<ordinal>` for an Issue acceptance criterion or `doc-<path>-heading-<slug>-rule-<ordinal>` for an authoritative documented rule, based on that source at the reviewed head.
+     Never use event delivery, time, run identity, actor, or paraphrased finding text. Recover and reuse an existing marker's task ID for the same canonical source. If the source identity is ambiguous, record `BLOCKED` and do not dispatch.
+5. Search the PR conversation for an existing marker:
    `<!-- work-to-codex:pr=<number>;head=<full-sha>;task=<stable-id> -->`
-5. If the same PR/head/task marker already exists, do not duplicate the instruction.
-6. Post the marker and the actionable instruction through the supported Codex PR conversation/review path.
-7. Treat acknowledgement, a new Codex task, a pushed commit, CI, and merge as separate states.
+6. Immediately before posting, re-read the current full head SHA and all handoff markers. If the same PR/head/task marker already exists, treat it as pending or acknowledged and do not duplicate the instruction. Comment and review deliveries for one canonical finding must resolve to one ID and one dispatch; different source anchors must remain distinct.
+7. Post the marker and the actionable instruction through the supported Codex PR conversation/review path.
+8. Treat acknowledgement, a new Codex task, a pushed commit, CI, and merge as separate states. A response is acknowledgement, not completion. A new head requires a fresh diff and CI review before the finding can be closed; never blindly redispatch an instruction from the old head.
 
 If Codex cannot attach to the repository environment, record `BLOCKED_HANDOFF` and stop automated repair. Do not loop on repeated mentions. A human may switch to Codex Code Review / Cloud and continue from the same Issue and PR.
 

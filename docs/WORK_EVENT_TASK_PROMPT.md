@@ -41,7 +41,12 @@ For every triggered pull-request event:
    - `DEPLOY_CONFIRMED`
 6. Before issuing a Codex repair instruction, search PR comments for:
    `<!-- work-to-codex:pr=<number>;head=<full-sha>;task=<stable-id> -->`
-   If the same PR/head/task marker already exists, do not dispatch it again.
+   Derive `<stable-id>` from the finding's canonical source, not from the triggering event or a description of the finding:
+   - for a GitHub review comment, use `review-comment-<immutable-numeric-comment-id>`;
+   - otherwise use an immutable GitHub object ID when one anchors the finding, such as `issue-comment-<immutable-numeric-comment-id>`;
+   - when no immutable GitHub object anchors the finding, use `issue-<issue-number>-criterion-<ordinal>` for an Issue acceptance criterion, or `doc-<path>-heading-<slug>-rule-<ordinal>` for an authoritative documented rule. The ordinal is its position in that canonical source at the reviewed head, not its position in an event payload.
+     Reuse a matching task ID already persisted in a PR marker when recovering the same canonical source. Never derive an ID from event delivery, time, run identity, actor, or paraphrased finding text. If the canonical source cannot be identified unambiguously, set `BLOCKED` and do not dispatch.
+     Immediately before posting, re-read the current full head SHA and all existing handoff markers. If the same PR/head/task marker already exists, its repair is pending or acknowledged; do not dispatch it again.
 7. Use `NEEDS_CODEX` only when one bounded repair is fully determined by approved requirements.
 8. For `NEEDS_CODEX`, post one PR comment containing:
    - the marker above;
@@ -51,7 +56,7 @@ For every triggered pull-request event:
    - explicit non-goals;
    - required tests/evidence;
    - an instruction for Codex to update the SAME PR branch.
-   Prefer the Codex PR review/conversation path. Treat handoff as incomplete until Codex responds or a new head SHA appears.
+     Prefer the Codex PR review/conversation path. A Codex response acknowledges the handoff but does not complete it. A new head SHA is only a candidate completion: start a fresh review of that head and its CI before deciding whether the finding is resolved. Do not blindly redispatch an old-head task after a head change.
 9. If a Codex task cannot attach to the configured repository environment, set `BLOCKED`. Do not repeatedly mention Codex in a loop.
 10. Use `NEEDS_HUMAN` and stop when the change affects:
     - roadmap purpose/order or accepted decisions;
