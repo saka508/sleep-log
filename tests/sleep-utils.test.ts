@@ -10,6 +10,7 @@ import {
   getMetricValue,
   getSleepStats,
   getDailyHeadacheDisplay,
+  getDailyHeadacheDisplayRows,
   normalizeSleepRecord,
   observedHeadacheIntensity,
   sleepMinutesFromTimes,
@@ -305,6 +306,22 @@ describe("stored record compatibility", () => {
     expect(getDailyHeadacheDisplay({ headache: true, headacheIntensity: undefined })).toEqual({ state: "missing", label: "頭痛あり・強度未記録", intensity: undefined });
     expect(getDailyHeadacheDisplay({ headache: true, headacheIntensity: 0 })).toEqual({ state: "observed", label: "頭痛あり・強度0", intensity: 0 });
     expect(getDailyHeadacheDisplay({ headache: true, headacheIntensity: 4 })).toEqual({ state: "observed", label: "頭痛あり・強度4", intensity: 4 });
+  });
+
+  it("builds an unambiguous recent daily headache presentation model for analysis", () => {
+    const rows = getDailyHeadacheDisplayRows([
+      { date: "2026-09-13", headache: true, headacheIntensity: 4 },
+      { date: "2026-09-16", headache: false, headacheIntensity: 0 },
+      { date: "2026-09-15", headache: true, headacheIntensity: undefined },
+      { date: "2026-09-14", headache: true, headacheIntensity: 0 },
+    ]);
+
+    expect(rows.map(({ date, state, label, intensity }) => ({ date, state, label, intensity }))).toEqual([
+      { date: "2026-09-16", state: "none", label: "頭痛なし", intensity: undefined },
+      { date: "2026-09-15", state: "missing", label: "頭痛あり・強度未記録", intensity: undefined },
+      { date: "2026-09-14", state: "observed", label: "頭痛あり・強度0", intensity: 0 },
+      { date: "2026-09-13", state: "observed", label: "頭痛あり・強度4", intensity: 4 },
+    ]);
   });
 
   it("keeps CSV blank and zero distinct while excluding invalid headache intensities", () => {

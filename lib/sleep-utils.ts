@@ -110,6 +110,16 @@ export function getDailyHeadacheDisplay(record: Pick<SleepRecord, "headache" | "
     : { state: "observed" as const, label: `頭痛あり・強度${intensity}`, intensity };
 }
 
+export function getDailyHeadacheDisplayRows(
+  records: Array<Pick<SleepRecord, "date" | "headache" | "headacheIntensity">>,
+  limit = 6,
+) {
+  return [...records]
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .slice(0, limit)
+    .map((record) => ({ date: record.date, ...getDailyHeadacheDisplay(record) }));
+}
+
 /** Normalize records loaded from AsyncStorage or CSV without rejecting legacy data. */
 export function normalizeSleepRecord(value: Partial<SleepRecord>): SleepRecord | null {
   if (!value.date || !value.id || !value.bedTime || !value.wakeTime) return null;
