@@ -75,7 +75,7 @@ export default function AnalysisDetailScreen() {
   const categoryHasData = useMemo(() => {
     if (category === "sleep") return trends.sleep.some((point) => point.value !== null);
     if (category === "condition") return [trends.sleepiness, trends.fatigue, trends.clarity, trends.muscleFatigue].some((points) => points.some((point) => point.value !== null));
-    if (category === "headache") return personalRecords.some((record) => record.headache) || events.length > 0;
+    if (category === "headache") return personalRecords.length > 0 || events.length > 0;
     return true;
   }, [category, trends, personalRecords, events.length]);
   const recommendation = useMemo(() => buildSleepRecommendation(records), [records]);

@@ -8,7 +8,7 @@ import { Card, EmptyState, IconButton, PageHeader, PrimaryButton, SectionLabel, 
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { useSleepData } from "@/lib/sleep-store";
-import { formatAcquiredAt, formatDate, formatDuration, getHeadacheFeatureLabel, timeInBedMinutesFromTimes } from "@/lib/sleep-utils";
+import { formatAcquiredAt, formatDate, formatDuration, getDailyHeadacheDisplay, getHeadacheFeatureLabel, timeInBedMinutesFromTimes } from "@/lib/sleep-utils";
 import { OPEN_METEO_ATTRIBUTION_URL } from "@/lib/weather-service";
 
 export default function RecordDetailScreen() {
@@ -16,6 +16,7 @@ export default function RecordDetailScreen() {
   const { date } = useLocalSearchParams<{ date: string }>();
   const { records, removeRecord, isReady } = useSleepData();
   const record = records.find((item) => item.date === date);
+  const headacheDisplay = record ? getDailyHeadacheDisplay(record) : null;
   const timeInBedMinutes = record ? timeInBedMinutesFromTimes(record.bedTime, record.wakeTime) : null;
   const [deleteDialog, setDeleteDialog] = useState<"confirm" | "success" | "error" | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -95,8 +96,7 @@ export default function RecordDetailScreen() {
           <DetailRow icon="local-cafe" label="カフェイン" value={record.caffeine ? "あり" : "なし"} valueColor={record.caffeine ? colors.warning : colors.success} />
           {record.caffeine && record.caffeineTime ? <DetailRow icon="schedule" label="摂取時刻" value={record.caffeineTime} /> : null}
           {record.caffeine && record.caffeineNote ? <DetailRow icon="notes" label="飲み物・量" value={record.caffeineNote} /> : null}
-          <DetailRow icon="healing" label="頭痛" value={record.headache ? "あり" : "なし"} valueColor={record.headache ? colors.error : colors.success} last={!record.headache} />
-          {record.headache ? <DetailRow icon="speed" label="頭痛の強さ" value={record.headacheIntensity === undefined ? "未入力" : `${record.headacheIntensity} / 10`} last={!record.headacheFeatures?.length} /> : null}
+          <DetailRow icon="healing" label="頭痛" value={headacheDisplay?.label ?? "記録なし"} valueColor={record.headache ? colors.error : colors.success} last={!record.headacheFeatures?.length} />
           {record.headache && record.headacheFeatures?.length ? <DetailRow icon="fact-check" label="頭痛の特徴" value={record.headacheFeatures.map(getHeadacheFeatureLabel).join("、")} last /> : null}
         </Card>
         {(record.fatigue !== undefined || record.muscleFatigue !== undefined) ? <Text style={[styles.subjectiveCaution, { color: colors.muted }]}>疲労・筋肉疲労は生活の振り返り用の記録であり、医学的な診断ではありません。</Text> : null}

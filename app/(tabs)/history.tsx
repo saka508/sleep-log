@@ -6,7 +6,7 @@ import { EmptyState, IconButton, PageHeader, SmallStatus } from "@/components/sl
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { useSleepData } from "@/lib/sleep-store";
-import { formatDuration, formatMonthDay, todayKey } from "@/lib/sleep-utils";
+import { formatDuration, formatMonthDay, getDailyHeadacheDisplay, todayKey } from "@/lib/sleep-utils";
 
 export default function HistoryScreen() {
   const colors = useColors();
@@ -45,7 +45,7 @@ export default function HistoryScreen() {
                 {item.napMinutes !== undefined && item.napMinutes > 0 ? <Text style={[styles.tag, { color: colors.primary, backgroundColor: `${colors.primary}12` }]}>昼寝 {item.napMinutes}分</Text> : null}
                 {item.sleepDurationDefinition !== "actualSleep" ? <Text style={[styles.tag, { color: colors.muted, backgroundColor: `${colors.muted}14` }]}>睡眠時間（旧定義）</Text> : null}
                 {item.caffeine ? <Text style={[styles.tag, { color: colors.warning, backgroundColor: `${colors.warning}14` }]}>カフェイン</Text> : null}
-                {item.headache ? <Text style={[styles.tag, { color: colors.error, backgroundColor: `${colors.error}12` }]}>頭痛</Text> : null}
+                <Text style={[styles.tag, { color: item.headache ? colors.error : colors.success, backgroundColor: item.headache ? `${colors.error}12` : `${colors.success}12` }]}>{getDailyHeadacheDisplay(item).label}</Text>
               </View>
             </View>
             <View style={styles.rowEnd}>
